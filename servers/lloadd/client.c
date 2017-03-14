@@ -31,7 +31,7 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
 {
     Connection *c = arg;
     Debug( LDAP_DEBUG_CONNS, "client_read_cb: connection %lu ready to read\n", c->c_connid, 0, 0 );
-    close( s );
+    evutil_closesocket( s );
     client_destroy( c );
 }
 
