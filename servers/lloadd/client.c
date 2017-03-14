@@ -71,6 +71,8 @@ Connection * client_init(
     /* We only register the write event when we have data pending */
     c->c_write_event = event;
 
+    c->c_private = listener;
+
     return c;
 fail:
     if ( c->c_write_event ) {

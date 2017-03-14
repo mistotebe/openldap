@@ -291,7 +291,6 @@ struct Connection {
     unsigned long		    c_connid;	/* id of this connection for stats*/
 
     struct berval	        c_peer_name;	/* peer name (trans=addr:port) */
-    Listener	            *c_listener;
     struct event            *c_read_event, *c_write_event;
 
     /* only can be changed by binding thread */
@@ -321,11 +320,7 @@ struct Connection {
     long	c_n_ops_executing;	/* num of ops currently executing */
     long	c_n_ops_completed;	/* num of ops completed */
 
-    /*
-     * Client connection handling
-     */
-    ldap_pvt_thread_start_t	*c_clientfunc;
-    void	*c_clientarg;
+    void	*c_private;
 };
 
 #ifdef LDAP_DEBUG
