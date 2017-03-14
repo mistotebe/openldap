@@ -36,6 +36,13 @@ LDAP_BEGIN_DECL
 struct config_args_s;	/* config.h */
 struct config_reply_s;	/* config.h */
 
+
+/*
+ * backend.c
+ */
+
+LDAP_SLAPD_F (int) backend_connect LDAP_P (( Backend *b ));
+
 /*
  * bconfig.c
  */
@@ -111,6 +118,9 @@ LDAP_SLAPD_F (Connection *) client_init LDAP_P((
 	const char* peername,
     struct event_base *base,
 	int use_tls ));
+LDAP_SLAPD_F (Connection *) upstream_init LDAP_P((
+	ber_socket_t s,
+	Backend* b ));
 LDAP_SLAPD_F (void) connection_destroy LDAP_P(( Connection *c ));
 
 /*
@@ -122,6 +132,7 @@ LDAP_SLAPD_F (int) slapd_daemon( struct event_base *daemon_base );
 LDAP_SLAPD_F (Listener **)	slapd_get_listeners LDAP_P((void));
 LDAP_SLAPD_F (void) slapd_remove LDAP_P((ber_socket_t s, Sockbuf *sb,
 	int wasactive, int wake, int locked ));
+LDAP_SLAPD_F (struct event_base *) slap_get_base LDAP_P(( ber_socket_t s ));
 
 LDAP_SLAPD_F (void) slap_sig_shutdown LDAP_P(( evutil_socket_t sig, short what, void *arg ));
 LDAP_SLAPD_F (void) slap_wake_listener LDAP_P((void));
@@ -132,6 +143,7 @@ LDAP_SLAPD_F (void) slap_resume_listeners LDAP_P((void));
 LDAP_SLAPD_F (void) slapd_clr_writetime LDAP_P((time_t old));
 LDAP_SLAPD_F (time_t) slapd_get_writetime LDAP_P((void));
 
+LDAP_SLAPD_V (struct evdns_base *) dnsbase;
 LDAP_SLAPD_V (volatile sig_atomic_t) slapd_abrupt_shutdown;
 LDAP_SLAPD_V (volatile sig_atomic_t) slapd_shutdown;
 LDAP_SLAPD_V (int) slapd_register_slp;

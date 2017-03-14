@@ -36,6 +36,7 @@
 #include <ac/unistd.h>
 
 #include <event2/event.h>
+#include <event2/dns.h>
 #include <event2/listener.h>
 
 #include "slap.h"
@@ -80,6 +81,8 @@ struct event_base *listener_base = NULL;
 Listener **slap_listeners = NULL;
 static volatile sig_atomic_t listening = 1; /* 0 when slap_listeners closed */
 static ldap_pvt_thread_t listener_tid, *daemon_tid;
+
+struct evdns_base *dnsbase;
 
 #ifndef SLAPD_LISTEN_BACKLOG
 #define SLAPD_LISTEN_BACKLOG 1024
@@ -1302,15 +1305,8 @@ slapd_daemon_task(
     time_t last_idle_check = 0;
     int ebadf = 0;
     int tid = (ldap_pvt_thread_t *) ptr - daemon_tid;
-    struct event_base *base;
+    struct event_base *base = slap_daemon[tid].base;
     struct event *event;
-
-    base = event_base_new();
-    if (!base) {
-        Debug(LDAP_DEBUG_ANY, "slapd_daemon_task: failed to acquire event base\n", 0, 0, 0 );
-        return (void *)-1;
-    }
-    slap_daemon[tid].base = base;
 
     event = event_new( base, -1, EV_WRITE, daemon_wakeup_cb, ptr );
     if (!event) {
@@ -1337,8 +1333,18 @@ int
 slapd_daemon( struct event_base *daemon_base )
 {
     int i, rc;
+    Backend *b;
+    struct event_base *base;
 
     assert( daemon_base != NULL );
+
+    dnsbase = evdns_base_new( daemon_base,
+            EVDNS_BASE_INITIALIZE_NAMESERVERS | \
+            EVDNS_BASE_DISABLE_WHEN_INACTIVE );
+    if ( !dnsbase ) {
+        Debug( LDAP_DEBUG_ANY, "daemon: failed to set up for async name resolution\n", 0, 0, 0 );
+        return -1;
+    }
 
     if ( slapd_daemon_threads > SLAPD_MAX_DAEMON_THREADS )
         slapd_daemon_threads = SLAPD_MAX_DAEMON_THREADS;
@@ -1351,6 +1357,13 @@ slapd_daemon( struct event_base *daemon_base )
 
     for ( i=0; i<slapd_daemon_threads; i++ )
     {
+        base = event_base_new();
+        if (!base) {
+            Debug(LDAP_DEBUG_ANY, "daemon: failed to acquire event base for an I/O thread\n", 0, 0, 0 );
+            return -1;
+        }
+        slap_daemon[i].base = base;
+
         ldap_pvt_thread_mutex_init( &slap_daemon[i].sd_mutex );
         /* threads that handle client and upstream sockets */
         rc = ldap_pvt_thread_create( &daemon_tid[i],
@@ -1359,6 +1372,13 @@ slapd_daemon( struct event_base *daemon_base )
         if ( rc != 0 ) {
             Debug( LDAP_DEBUG_ANY,
                     "listener ldap_pvt_thread_create failed (%d)\n", rc, 0, 0 );
+            return rc;
+        }
+    }
+
+    LDAP_STAILQ_FOREACH( b, &backend, b_next ) {
+        rc = backend_connect( b );
+        if ( rc ) {
             return rc;
         }
     }
@@ -1442,6 +1462,13 @@ slap_sig_shutdown( evutil_socket_t sig, short what, void *arg )
 	errno = save_errno;
 }
 
+
+struct event_base *
+slap_get_base( ber_socket_t s )
+{
+    int tid = DAEMON_ID(s);
+    return slap_daemon[tid].base;
+}
 
 Listener **
 slapd_get_listeners( void )
