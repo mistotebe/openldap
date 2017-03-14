@@ -94,6 +94,7 @@ static ConfigFile *cfn;
 
 static ConfigDriver config_fname;
 static ConfigDriver config_generic;
+static ConfigDriver config_backend;
 #ifdef LDAP_TCP_BUFFER
 static ConfigDriver config_tcp_buffer;
 #endif /* LDAP_TCP_BUFFER */
@@ -104,6 +105,9 @@ static ConfigDriver config_include;
 static ConfigDriver config_tls_option;
 static ConfigDriver config_tls_config;
 #endif
+
+int			nBackend = 0;
+slap_b_head backend = LDAP_STAILQ_HEAD_INITIALIZER(backend);
 
 enum {
 	CFG_ACL = 1,
@@ -145,8 +149,8 @@ static ConfigTable config_back_cf_table[] = {
 		&slap_conn_max_pending },
 	{ "conn_max_pending_auth", "max", 2, 2, 0, ARG_INT,
 		&slap_conn_max_pending_auth },
-	{ "database", "type", 2, 2, 0, ARG_MAGIC|CFG_DATABASE,
-		&config_generic },
+	{ "backend", "type", 2, 2, 0, ARG_MAGIC|CFG_DATABASE,
+		&config_backend },
 	{ "gentlehup", "on|off", 2, 2, 0,
 #ifdef SIGHUP
 		ARG_ON_OFF, &global_gentlehup,
@@ -354,6 +358,101 @@ config_generic(ConfigArgs *c) {
 
 	}
 	return(0);
+}
+
+static int
+config_backend(ConfigArgs *c) {
+    int i, tmp, rc = -1;
+    LDAPURLDesc *lud = NULL;
+    Backend *b;
+
+    b = ch_calloc( 1, sizeof(Backend) );
+
+    for ( i=1; i < c->argc; i++ ) {
+        if ( bindconf_parse( c->argv[i], &b->b_bindconf ) ) {
+            Debug( LDAP_DEBUG_ANY, "config_backend: error parsing backend configuration item '%s'\n", c->argv[i], 0, 0 );
+            rc = -1;
+            goto done;
+        }
+    }
+
+    if ( BER_BVISNULL( &b->b_bindconf.sb_uri ) ) {
+        Debug( LDAP_DEBUG_ANY, "config_backend: backend address not specified\n", 0, 0, 0 );
+        rc = -1;
+        goto done;
+    }
+
+    rc = ldap_url_parse( b->b_bindconf.sb_uri.bv_val, &lud );
+    if( rc != LDAP_URL_SUCCESS ) {
+        Debug( LDAP_DEBUG_ANY,
+                "config_backend: listen URL \"%s\" parse error=%d\n",
+                b->b_bindconf.sb_uri.bv_val, rc, 0 );
+        rc = -1;
+        goto done;
+    }
+
+#ifndef HAVE_TLS
+    if( ldap_pvt_url_scheme2tls( lud->lud_scheme ) ) {
+        Debug( LDAP_DEBUG_ANY, "config_backend: TLS not supported (%s)\n",
+                b->b_bindconf.sb_uri.bv_val, 0, 0 );
+        rc = -1;
+        goto done;
+    }
+
+    if ( !lud->lud_port ) {
+        b->b_port = LDAP_PORT;
+    } else {
+        b->b_port = lud->lud_port;
+    }
+
+#else /* HAVE_TLS */
+    tmp = ldap_pvt_url_scheme2tls( lud->lud_scheme );
+    if ( tmp ) {
+        b->b_tls = BALANCER_LDAPS;
+    }
+
+    if ( !lud->lud_port ) {
+        b->b_port = b->b_tls ? LDAPS_PORT : LDAP_PORT;
+    } else {
+        b->b_port = lud->lud_port;
+    }
+#endif /* HAVE_TLS */
+
+    b->b_proto = tmp = ldap_pvt_url_scheme2proto(lud->lud_scheme);
+    if ( tmp == LDAP_PROTO_IPC ) {
+#ifdef LDAP_PF_LOCAL
+        if ( lud->lud_host == NULL || lud->lud_host[0] == '\0' ) {
+            b->b_host = ch_strdup(LDAPI_SOCK);
+        }
+#else /* ! LDAP_PF_LOCAL */
+
+        Debug( LDAP_DEBUG_ANY, "config_backend: URL scheme not supported: %s",
+                url, 0, 0 );
+        rc = -1;
+        goto done;
+#endif /* ! LDAP_PF_LOCAL */
+    } else {
+        if ( lud->lud_host == NULL || lud->lud_host[0] == '\0' ) {
+            Debug( LDAP_DEBUG_ANY, "config_backend: backend url missing hostname: '%s'\n", b->b_bindconf.sb_uri.bv_val, 0, 0 );
+            rc = -1;
+            goto done;
+        }
+    }
+    if ( !b->b_host ) {
+        b->b_host = ch_strdup(lud->lud_host);
+    }
+
+    ldap_pvt_thread_mutex_init( &b->b_lock );
+
+done:
+    ldap_free_urldesc( lud );
+    if ( rc ) {
+        ch_free( b );
+    } else {
+        LDAP_STAILQ_INSERT_TAIL(&backend, b, b_next);
+    }
+
+    return rc;
 }
 
 static int
@@ -1359,134 +1458,6 @@ config_get_vals(ConfigTable *cf, ConfigArgs *c)
 		}
 		/* else: maybe c->rvalue_vals already set? */
 	}
-	return rc;
-}
-
-/* Split an LDIF line into space-separated tokens. Words may be grouped
- * by quotes. A quoted string may begin in the middle of a word, but must
- * end at the end of the word (be followed by whitespace or EOS). Any other
- * quotes are passed through unchanged. All other characters are passed
- * through unchanged.
- */
-static char *
-strtok_quote_ldif( char **line )
-{
-	char *beg, *ptr, *quote=NULL;
-	int inquote=0;
-
-	ptr = *line;
-
-	if ( !ptr || !*ptr )
-		return NULL;
-
-	while( isspace( (unsigned char) *ptr )) ptr++;
-
-	if ( *ptr == '"' ) {
-		inquote = 1;
-		ptr++;
-	}
-
-	beg = ptr;
-
-	for (;*ptr;ptr++) {
-		if ( *ptr == '"' ) {
-			if ( inquote && ( !ptr[1] || isspace((unsigned char) ptr[1]))) {
-				*ptr++ = '\0';
-				break;
-			}
-			inquote = 1;
-			quote = ptr;
-			continue;
-		}
-		if ( inquote )
-			continue;
-		if ( isspace( (unsigned char) *ptr )) {
-			*ptr++ = '\0';
-			break;
-		}
-	}
-	if ( quote ) {
-		while ( quote < ptr ) {
-			*quote = quote[1];
-			quote++;
-		}
-	}
-	if ( !*ptr ) {
-		*line = NULL;
-	} else {
-		while ( isspace( (unsigned char) *ptr )) ptr++;
-		*line = ptr;
-	}
-	return beg;
-}
-
-void
-config_parse_ldif( ConfigArgs *c )
-{
-	char *next;
-	c->tline = ch_strdup(c->line);
-	next = c->tline;
-
-	while ((c->argv[c->argc] = strtok_quote_ldif( &next )) != NULL) {
-		c->argc++;
-		if ( c->argc >= c->argv_size ) {
-			char **tmp = ch_realloc( c->argv, (c->argv_size + ARGS_STEP) *
-				sizeof( *c->argv ));
-			c->argv = tmp;
-			c->argv_size += ARGS_STEP;
-		}
-	}
-	c->argv[c->argc] = NULL;
-}
-
-int
-config_parse_vals(ConfigTable *ct, ConfigArgs *c, int valx)
-{
-	int 	rc = 0;
-
-	snprintf( c->log, sizeof( c->log ), "%s: value #%d", ct->name, valx );
-	c->argc = 1;
-	c->argv[0] = ct->name;
-
-	if ( ( ct->arg_type & ARG_QUOTE ) && c->line[ 0 ] != '"' ) {
-		c->argv[c->argc] = c->line;
-		c->argc++;
-		c->argv[c->argc] = NULL;
-		c->tline = NULL;
-	} else {
-		config_parse_ldif( c );
-	}
-	rc = config_check_vals( ct, c, 1 );
-	ch_free( c->tline );
-	c->tline = NULL;
-
-	if ( rc )
-		rc = LDAP_CONSTRAINT_VIOLATION;
-
-	return rc;
-}
-
-int
-config_parse_add(ConfigTable *ct, ConfigArgs *c, int valx)
-{
-	int	rc = 0;
-
-	snprintf( c->log, sizeof( c->log ), "%s: value #%d", ct->name, valx );
-	c->argc = 1;
-	c->argv[0] = ct->name;
-
-	if ( ( ct->arg_type & ARG_QUOTE ) && c->line[ 0 ] != '"' ) {
-		c->argv[c->argc] = c->line;
-		c->argc++;
-		c->argv[c->argc] = NULL;
-		c->tline = NULL;
-	} else {
-		config_parse_ldif( c );
-	}
-	c->op = LDAP_MOD_ADD;
-	rc = config_add_vals( ct, c );
-	ch_free( c->tline );
-
 	return rc;
 }
 

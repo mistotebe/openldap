@@ -100,6 +100,7 @@ LDAP_SLAPD_V (int) slap_debug;
 
 typedef unsigned long slap_mask_t;
 
+typedef struct Backend Backend;
 typedef struct Connection Connection;
 /* end of forward declarations */
 
@@ -118,6 +119,11 @@ typedef union Sockaddr {
 #ifdef LDAP_PF_INET6
 extern int slap_inet4or6;
 #endif
+
+typedef LDAP_STAILQ_HEAD(BeSt, Backend) slap_b_head;
+
+LDAP_SLAPD_V (int) nBackend;
+LDAP_SLAPD_V (slap_b_head) backend;
 
 LDAP_SLAPD_V (int) slapMode;
 #define SLAP_UNDEFINED_MODE	0x0000
@@ -241,6 +247,12 @@ typedef enum {
 	SLAP_OP_LAST
 } slap_op_t;
 
+enum {
+    BALANCER_CLEARTEXT = 0,
+    BALANCER_LDAPS,
+    BALANCER_STARTTLS,
+};
+
 typedef struct slap_counters_t {
 	struct slap_counters_t	*sc_next;
 	ldap_pvt_thread_mutex_t	sc_mutex;
@@ -256,6 +268,19 @@ typedef struct slap_counters_t {
 } slap_counters_t;
 
 typedef struct Listener Listener;
+
+struct Backend {
+    struct slap_bindconf b_bindconf;
+    ldap_pvt_thread_mutex_t b_lock;
+
+    int b_proto, b_tls, b_port;
+    char *b_host;
+
+    int b_numconns, b_numbindconns;
+    Connection *b_conns, *b_bindconns;
+
+    LDAP_STAILQ_ENTRY(Backend) b_next;
+};
 
 /*
  * represents a connection from an ldap client
