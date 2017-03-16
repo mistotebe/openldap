@@ -56,14 +56,14 @@ operation_destroy( Operation *op )
     if ( op->o_client ) {
         c = op->o_client;
         ldap_pvt_thread_mutex_lock( &c->c_mutex );
-        avl_delete( &c->c_ops, op, operation_client_cmp );
+        tavl_delete( &c->c_ops, op, operation_client_cmp );
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
     }
 
     if ( op->o_upstream ) {
         c = op->o_upstream;
         ldap_pvt_thread_mutex_lock( &c->c_mutex );
-        avl_delete( &c->c_ops, op, operation_upstream_cmp );
+        tavl_delete( &c->c_ops, op, operation_upstream_cmp );
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
     }
 
@@ -86,7 +86,7 @@ operation_init( Connection *c, BerElement *ber )
         goto fail;
     }
 
-    rc = avl_insert( &c->c_ops, op, operation_client_cmp, avl_dup_error );
+    rc = tavl_insert( &c->c_ops, op, operation_client_cmp, avl_dup_error );
     if ( rc ) {
         Debug( LDAP_DEBUG_PACKETS, "operation_init: several operations with"
             " same msgid=%d in-flight from the client\n",
@@ -101,7 +101,7 @@ operation_init( Connection *c, BerElement *ber )
             break;
     }
     if ( rc ) {
-        avl_delete( &c->c_ops, op, operation_client_cmp );
+        tavl_delete( &c->c_ops, op, operation_client_cmp );
         goto fail;
     }
 
@@ -139,7 +139,7 @@ operation_process( void *ctx, void *arg )
     }
 
     op->o_upstream_msgid = msgid = c->c_next_msgid++;
-    rc = avl_insert( &c->c_ops, op, operation_upstream_cmp, avl_dup_error );
+    rc = tavl_insert( &c->c_ops, op, operation_upstream_cmp, avl_dup_error );
     assert( rc == LDAP_SUCCESS );
 
     ber_start_seq( output, LDAP_TAG_MESSAGE );

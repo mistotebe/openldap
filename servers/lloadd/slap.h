@@ -328,7 +328,7 @@ struct Connection {
     BerElement	            *c_currentber;	/* ber we're attempting to read */
     BerElement              *c_pendingber;	/* ber we're attempting to write */
 
-    Avlnode                 *c_ops; /* Operations pending on the connection */
+    TAvlnode                *c_ops; /* Operations pending on the connection */
 
 #define	CONN_IS_TLS	1
 #define	CONN_IS_CLIENT	4
