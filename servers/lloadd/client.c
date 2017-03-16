@@ -30,8 +30,9 @@ static void
 client_read_cb( evutil_socket_t s, short what, void *arg )
 {
     Connection *c = arg;
+
+    ldap_pvt_thread_mutex_lock( &c->c_mutex );
     Debug( LDAP_DEBUG_CONNS, "client_read_cb: connection %lu ready to read\n", c->c_connid, 0, 0 );
-    evutil_closesocket( s );
     client_destroy( c );
 }
 
@@ -41,7 +42,8 @@ client_write_cb( evutil_socket_t s, short what, void *arg )
     Connection *c = arg;
 }
 
-Connection * client_init(
+Connection *
+client_init(
     ber_socket_t s,
     Listener *listener,
     const char* peername,
@@ -72,6 +74,7 @@ Connection * client_init(
     c->c_write_event = event;
 
     c->c_private = listener;
+    ldap_pvt_thread_mutex_unlock( &c->c_mutex );
 
     return c;
 fail:
@@ -83,6 +86,7 @@ fail:
         event_del( c->c_read_event );
         event_free( c->c_read_event );
     }
+    c->c_struct_state = SLAP_C_UNINITIALIZED;
     connection_destroy( c );
     return NULL;
 }
@@ -96,5 +100,6 @@ client_destroy( Connection *c )
     event_del( c->c_write_event );
     event_free( c->c_write_event );
 
+    c->c_struct_state = SLAP_C_UNINITIALIZED;
     connection_destroy( c );
 }

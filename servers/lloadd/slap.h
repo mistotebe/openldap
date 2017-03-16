@@ -305,7 +305,7 @@ enum sc_conn_state {
 struct Connection {
     enum sc_struct_state	c_struct_state; /* structure management state */
     enum sc_conn_state	    c_conn_state;	/* connection state */
-    ber_socket_t	        c_sd;
+    ber_socket_t	        c_fd;
 
     ldap_pvt_thread_mutex_t	c_mutex; /* protect the connection */
     Sockbuf		            *c_sb;			/* ber connection stuff		  */
@@ -314,6 +314,7 @@ struct Connection {
     time_t		            c_starttime;	/* when the connection was opened */
     time_t		            c_activitytime;	/* when the connection was last used */
     unsigned long		    c_connid;	/* id of this connection for stats*/
+    ber_int_t               c_next_msgid; /* msgid of the next message */
 
     struct berval	        c_peer_name;	/* peer name (trans=addr:port) */
     struct event            *c_read_event, *c_write_event;
