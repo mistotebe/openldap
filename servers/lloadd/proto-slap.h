@@ -42,6 +42,7 @@ struct config_reply_s;	/* config.h */
  */
 
 LDAP_SLAPD_F (void *) backend_connect LDAP_P (( void *ctx, void *arg ));
+LDAP_SLAPD_F (Connection *) backend_select LDAP_P (( Operation *op ));
 
 /*
  * bconfig.c
@@ -197,6 +198,15 @@ LDAP_SLAPD_F (int)
 parse_syslog_user LDAP_P(( const char *arg, int *syslogUser ));
 LDAP_SLAPD_F (int)
 parse_debug_unknowns LDAP_P(( char **unknowns, int *levelp ));
+
+/*
+ * operation.c
+ */
+LDAP_SLAPD_F (int) operation_upstream_cmp LDAP_P(( const void *l, const void *r ));
+LDAP_SLAPD_F (int) operation_client_cmp LDAP_P(( const void *l, const void *r ));
+LDAP_SLAPD_F (void *) operation_process LDAP_P(( void *ctx, void *arg ));
+LDAP_SLAPD_F (Operation *) operation_init LDAP_P(( Connection *c, BerElement *ber ));
+LDAP_SLAPD_F (void) operation_destroy LDAP_P((Operation *op));
 
 /*
  * sl_malloc.c
