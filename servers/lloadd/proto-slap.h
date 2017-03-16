@@ -70,6 +70,17 @@ LDAP_SLAPD_F (void) ch_free LDAP_P(( void * ));
 #endif
 
 /*
+ * client.c
+ */
+LDAP_SLAPD_F (Connection *) client_init LDAP_P((
+	ber_socket_t s,
+	Listener* url,
+	const char* peername,
+    struct event_base *base,
+	int use_tls ));
+LDAP_SLAPD_F (void) client_write_cb LDAP_P(( evutil_socket_t s, short what, void *arg ));
+
+/*
  * config.c
  */
 LDAP_SLAPD_F (int) read_config LDAP_P(( const char *fname, const char *dir ));
@@ -112,15 +123,6 @@ LDAP_SLAPD_F (Connection *) connection_init LDAP_P((
 	ber_socket_t s,
 	const char* peername,
 	int use_tls ));
-LDAP_SLAPD_F (Connection *) client_init LDAP_P((
-	ber_socket_t s,
-	Listener* url,
-	const char* peername,
-    struct event_base *base,
-	int use_tls ));
-LDAP_SLAPD_F (Connection *) upstream_init LDAP_P((
-	ber_socket_t s,
-	Backend* b ));
 LDAP_SLAPD_F (void) connection_destroy LDAP_P(( Connection *c ));
 
 /*
@@ -223,6 +225,15 @@ LDAP_SLAPD_F (int) value_add_one LDAP_P((
 
 /* assumes (x) > (y) returns 1 if true, 0 otherwise */
 #define SLAP_PTRCMP(x, y) ((x) < (y) ? -1 : (x) > (y))
+
+/*
+ * upstream.c
+ */
+LDAP_SLAPD_F (void) upstream_write_cb LDAP_P(( evutil_socket_t s, short what, void *arg ));
+LDAP_SLAPD_F (void) upstream_read_cb LDAP_P(( evutil_socket_t s, short what, void *arg ));
+LDAP_SLAPD_F (Connection *) upstream_init LDAP_P((
+	ber_socket_t s,
+	Backend* b ));
 
 /*
  * user.c
