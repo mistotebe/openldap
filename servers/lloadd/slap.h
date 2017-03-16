@@ -325,7 +325,7 @@ struct Connection {
     ldap_pvt_thread_mutex_t	c_write_mutex;	/* only one pdu written at a time */
 
     BerElement	            *c_currentber;	/* ber we're attempting to read */
-    struct berval           c_pendingber;	/* ber we're attempting to write */
+    BerElement              *c_pendingber;	/* ber we're attempting to write */
 
 #define	CONN_IS_TLS	1
 #define	CONN_IS_CLIENT	4
