@@ -376,6 +376,18 @@ config_backend(ConfigArgs *c) {
         }
     }
 
+    if ( b->b_bindconf.sb_method == LDAP_AUTH_SASL ) {
+#ifndef HAVE_CYRUS_SASL
+        Debug( LDAP_DEBUG_ANY, "config_backend: no sasl support available\n", 0, 0, 0 );
+        rc = -1;
+        goto done;
+#else /* HAVE_CYRUS_SASL */
+        Debug( LDAP_DEBUG_ANY, "config_backend: no sasl support yet\n", 0, 0, 0 );
+        rc = -1;
+        goto done;
+#endif
+    }
+
     if ( BER_BVISNULL( &b->b_bindconf.sb_uri ) ) {
         Debug( LDAP_DEBUG_ANY, "config_backend: backend address not specified\n", 0, 0, 0 );
         rc = -1;
