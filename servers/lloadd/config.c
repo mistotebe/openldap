@@ -149,7 +149,7 @@ static ConfigTable config_back_cf_table[] = {
 		&slap_conn_max_pending },
 	{ "conn_max_pending_auth", "max", 2, 2, 0, ARG_INT,
 		&slap_conn_max_pending_auth },
-	{ "backend", "type", 2, 2, 0, ARG_MAGIC|CFG_DATABASE,
+	{ "backend", "type", 2, 0, 0, ARG_MAGIC|CFG_DATABASE,
 		&config_backend },
 	{ "gentlehup", "on|off", 2, 2, 0,
 #ifdef SIGHUP
