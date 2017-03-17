@@ -272,7 +272,7 @@ typedef struct Listener Listener;
 
 struct Backend {
     struct slap_bindconf b_bindconf;
-    ldap_pvt_thread_mutex_t b_lock;
+    ldap_pvt_thread_mutex_t b_mutex;
 
     int b_proto, b_tls, b_port;
     char *b_host;
