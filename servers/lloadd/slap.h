@@ -95,6 +95,7 @@ LDAP_BEGIN_DECL
 /* unknown config file directive */
 #define SLAP_CONF_UNKNOWN (-1026)
 
+#define BER_BV_OPTIONAL( bv ) ( BER_BVISNULL( bv ) ? NULL : ( bv ) )
 
 LDAP_SLAPD_V (int) slap_debug;
 
