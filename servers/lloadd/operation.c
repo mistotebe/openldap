@@ -151,9 +151,10 @@ operation_init( Connection *c, BerElement *ber )
 
     rc = tavl_insert( &c->c_ops, op, operation_client_cmp, avl_dup_error );
     if ( rc ) {
-        Debug( LDAP_DEBUG_PACKETS, "operation_init: several operations with"
-            " same msgid=%d in-flight from the client\n",
-            op->o_client_msgid, 0, 0 );
+        Debug( LDAP_DEBUG_PACKETS, "operation_init: "
+                "several operations with same msgid=%d in-flight "
+                "from the client\n",
+                op->o_client_msgid, 0, 0 );
         goto fail;
     }
 
@@ -173,6 +174,10 @@ operation_init( Connection *c, BerElement *ber )
         ber_skip_element( ber, &op->o_ctrls );
     }
 
+    Debug( LDAP_DEBUG_TRACE, "operation_init: "
+            "set up a new operation, %s with msgid=%d for client %lu\n",
+            slap_msgtype2str(op->o_tag), op->o_client_msgid, c->c_connid );
+
     return op;
 
 fail:
@@ -191,7 +196,9 @@ operation_process( void *ctx, void *arg )
 
     c = backend_select( op );
     if ( !c ) {
-        Debug( LDAP_DEBUG_STATS, "operation_process: no available connection found\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_STATS, "operation_process: "
+                "no available connection found\n",
+                0, 0, 0 );
         goto fail;
     }
     op->o_upstream = c;

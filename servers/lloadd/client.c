@@ -36,12 +36,15 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
     ber_len_t len;
 
     ldap_pvt_thread_mutex_lock( &c->c_mutex );
-    Debug( LDAP_DEBUG_CONNS, "client_read_cb: connection %lu ready to read\n", c->c_connid, 0, 0 );
+    Debug( LDAP_DEBUG_CONNS, "client_read_cb: "
+            "connection %lu ready to read\n",
+            c->c_connid, 0, 0 );
 
     ber = c->c_currentber;
     if ( ber == NULL && ( ber = ber_alloc() ) == NULL )
     {
-        Debug( LDAP_DEBUG_ANY, "ber_alloc failed\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "client_read_cb: "
+                "ber_alloc failed\n", 0, 0, 0 );
         goto fail;
     }
 
@@ -50,7 +53,7 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
         int err = sock_errno();
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
-            Debug( LDAP_DEBUG_ANY,
+            Debug( LDAP_DEBUG_ANY, "client_read_cb: "
                     "ber_get_next on fd %d failed errno=%d (%s)\n",
                     c->c_fd, err, sock_errstr(err) );
 
@@ -66,7 +69,8 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
 
     op = operation_init( c, ber );
     if ( !op ) {
-        Debug( LDAP_DEBUG_ANY, "operation_init failed\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "client_read_cb: "
+                "operation_init failed\n", 0, 0, 0 );
         goto fail;
     }
 
@@ -96,7 +100,9 @@ client_write_cb( evutil_socket_t s, short what, void *arg )
     Connection *c = arg;
 
     ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
-    Debug( LDAP_DEBUG_CONNS, "client_write_cb: have something to write to client %lu\n", c->c_connid, 0, 0 );
+    Debug( LDAP_DEBUG_CONNS, "client_write_cb: "
+            "have something to write to client %lu\n",
+            c->c_connid, 0, 0 );
 
     if ( ber_flush( c->c_sb, c->c_pendingber, 1 ) ) {
         int err = sock_errno();
@@ -131,7 +137,9 @@ client_init(
 
     event = event_new( base, s, EV_READ|EV_PERSIST, client_read_cb, c );
     if ( !event ) {
-        Debug( LDAP_DEBUG_ANY, "Read event could not be allocated\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "client_init: "
+                "Read event could not be allocated\n",
+                0, 0, 0 );
         goto fail;
     }
     event_add( event, NULL );
@@ -139,7 +147,9 @@ client_init(
 
     event = event_new( base, s, EV_WRITE, client_write_cb, c );
     if ( !event ) {
-        Debug( LDAP_DEBUG_ANY, "Write event could not be allocated\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "client_init: "
+                "Write event could not be allocated\n",
+                0, 0, 0 );
         goto fail;
     }
     /* We only register the write event when we have data pending */

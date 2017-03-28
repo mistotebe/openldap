@@ -37,12 +37,15 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
     int finished = 0;
 
     ldap_pvt_thread_mutex_lock( &c->c_mutex );
-    Debug( LDAP_DEBUG_CONNS, "upstream_read_cb: connection %lu ready to read\n", c->c_connid, 0, 0 );
+    Debug( LDAP_DEBUG_CONNS, "upstream_read_cb: "
+            "connection %lu ready to read\n",
+            c->c_connid, 0, 0 );
 
     ber = c->c_currentber;
     if ( ber == NULL && ( ber = ber_alloc() ) == NULL )
     {
-        Debug( LDAP_DEBUG_ANY, "ber_alloc failed\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "upstream_read_cb: "
+                "ber_alloc failed\n", 0, 0, 0 );
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
         return;
     }
@@ -52,7 +55,7 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
         int err = sock_errno();
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
-            Debug( LDAP_DEBUG_ANY,
+            Debug( LDAP_DEBUG_ANY, "upstream_read_cb: "
                     "ber_get_next on fd %d failed errno=%d (%s)\n",
                     c->c_fd, err, sock_errstr(err) );
 
@@ -131,7 +134,9 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
 
     return;
 fail:
-    Debug( LDAP_DEBUG_ANY, "upstream_read_cb: error on processing a response on upstream connection %ld\n", c->c_connid, 0, 0 );
+    Debug( LDAP_DEBUG_ANY, "upstream_read_cb: "
+            "error on processing a response on upstream connection %ld\n",
+            c->c_connid, 0, 0 );
     ber_free( ber, 1 );
     upstream_destroy( c );
 }
@@ -143,13 +148,17 @@ upstream_finish( Connection *c )
     struct event *event;
     evutil_socket_t s = c->c_fd;
 
-    Debug( LDAP_DEBUG_CONNS, "upstream_finish: connection %lu is ready for use\n", c->c_connid, 0, 0 );
+    Debug( LDAP_DEBUG_CONNS, "upstream_finish: "
+            "connection %lu is ready for use\n",
+            c->c_connid, 0, 0 );
 
     base = slap_get_base( s );
 
     event = event_new( base, s, EV_READ|EV_PERSIST, upstream_read_cb, c );
     if ( !event ) {
-        Debug( LDAP_DEBUG_ANY, "Read event could not be allocated\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "upstream_finish: "
+                "Read event could not be allocated\n",
+                0, 0, 0 );
         goto fail;
     }
     event_add( event, NULL );
@@ -187,12 +196,15 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
     ber_int_t msgid, result;
 
     ldap_pvt_thread_mutex_lock( &c->c_mutex );
-    Debug( LDAP_DEBUG_CONNS, "upstream_bind_cb: connection %lu ready to read\n", c->c_connid, 0, 0 );
+    Debug( LDAP_DEBUG_CONNS, "upstream_bind_cb: "
+            "connection %lu ready to read\n",
+            c->c_connid, 0, 0 );
 
     ber = c->c_currentber;
     if ( ber == NULL && ( ber = ber_alloc() ) == NULL )
     {
-        Debug( LDAP_DEBUG_ANY, "ber_alloc failed\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
+                "ber_alloc failed\n", 0, 0, 0 );
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
         return;
     }
@@ -202,7 +214,7 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
         int err = sock_errno();
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
-            Debug( LDAP_DEBUG_ANY,
+            Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
                     "ber_get_next on fd %d failed errno=%d (%s)\n",
                     c->c_fd, err, sock_errstr(err) );
 
@@ -216,22 +228,24 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
     c->c_currentber = NULL;
 
     if ( ber_scanf( ber, "it", &msgid, &tag ) == LBER_ERROR ) {
-        Debug( LDAP_DEBUG_ANY, "upstream_bind_cb:"
-                " protocol violation from server\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
+                "protocol violation from server\n",
+                0, 0, 0 );
         goto fail;
     }
 
     if ( msgid != ( c->c_next_msgid - 1 ) || tag != LDAP_RES_BIND ) {
-        Debug( LDAP_DEBUG_ANY, "upstream_bind_cb:"
-                " unexpected %s from server, msgid=%d\n",
+        Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
+                "unexpected %s from server, msgid=%d\n",
                 slap_msgtype2str(tag), msgid, 0 );
         goto fail;
     }
 
     if ( ber_scanf( ber, "{eAA" /* "}" */, &result, &matcheddn, &message )
             == LBER_ERROR ) {
-        Debug( LDAP_DEBUG_ANY, "upstream_bind_cb:"
-                " response does not conform with a bind response\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
+                "response does not conform with a bind response\n",
+                0, 0, 0 );
         goto fail;
     }
 
@@ -244,7 +258,9 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
             /* TODO: fallthrough until we implement SASL */
 #endif /* HAVE_CYRUS_SASL */
         default:
-            Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: upstream bind failed, rc=%d, message='%s'\n", result, message, 0 );
+            Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
+                    "upstream bind failed, rc=%d, message='%s'\n",
+                    result, message, 0 );
             goto fail;
     }
 
@@ -269,13 +285,17 @@ upstream_write_cb( evutil_socket_t s, short what, void *arg )
     ber_slen_t len;
 
     ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
-    Debug( LDAP_DEBUG_CONNS, "upstream_write_cb: have something to write to upstream %lu\n", c->c_connid, 0, 0 );
+    Debug( LDAP_DEBUG_CONNS, "upstream_write_cb: "
+            "have something to write to upstream %lu\n",
+            c->c_connid, 0, 0 );
 
     if ( ber_flush( c->c_sb, c->c_pendingber, 1 ) ) {
         int err = sock_errno();
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
             ldap_pvt_thread_mutex_lock( &c->c_mutex );
-            Debug( LDAP_DEBUG_ANY, "upstream_write_cb: error writing to connection %ld\n", c->c_connid, 0, 0 );
+            Debug( LDAP_DEBUG_ANY, "upstream_write_cb: "
+                    "error writing to connection %ld\n",
+                    c->c_connid, 0, 0 );
             ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
             upstream_destroy( c );
             return;
@@ -307,7 +327,9 @@ upstream_bind( void *ctx, void *arg )
 
     event = event_new( base, s, EV_READ|EV_PERSIST, upstream_bind_cb, c );
     if ( !event ) {
-        Debug( LDAP_DEBUG_ANY, "Read event could not be allocated\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "upstream_bind: "
+                "Read event could not be allocated\n",
+                0, 0, 0 );
         upstream_destroy( c );
         return NULL;
     }
@@ -365,7 +387,9 @@ upstream_init( ber_socket_t s, Backend *b )
 
     event = event_new( base, s, EV_WRITE, upstream_write_cb, c );
     if ( !event ) {
-        Debug( LDAP_DEBUG_ANY, "Write event could not be allocated\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_ANY, "upstream_init: "
+                "Write event could not be allocated\n",
+                0, 0, 0 );
         goto fail;
     }
     /* We only register the write event when we have data pending */
