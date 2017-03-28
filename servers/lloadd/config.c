@@ -73,6 +73,8 @@ ber_len_t sockbuf_max_incoming_auth= SLAP_SB_MAX_INCOMING_AUTH;
 int	slap_conn_max_pending = SLAP_CONN_MAX_PENDING_DEFAULT;
 int	slap_conn_max_pending_auth = SLAP_CONN_MAX_PENDING_AUTH;
 
+int slap_conn_max_responses_per_cycle = SLAP_CONN_MAX_RESPONSES_PER_CYCLE_DEFAULT;
+
 char   *slapd_pid_file  = NULL;
 char   *slapd_args_file = NULL;
 
@@ -131,6 +133,7 @@ enum {
 	CFG_LTHREADS,
 	CFG_THREADQS,
 	CFG_TLS_ECNAME,
+	CFG_RESCOUNT,
 
 	CFG_LAST
 };
@@ -202,6 +205,8 @@ static ConfigTable config_back_cf_table[] = {
 		ARG_INT|ARG_MAGIC|CFG_THREADQS, &config_generic,
 #endif
     },
+	{ "max_responses_per_cycle", "count", 2, 2, 0,
+		ARG_INT|ARG_MAGIC|CFG_RESCOUNT, &config_generic, },
 	{ "TLSCACertificateFile", NULL, 2, 2, 0,
 #ifdef HAVE_TLS
 		CFG_TLS_CA_FILE|ARG_STRING|ARG_MAGIC, &config_tls_option,
@@ -347,6 +352,18 @@ config_generic(ConfigArgs *c) {
 			slapd_daemon_mask = mask;
 			slapd_daemon_threads = mask+1;
 			}
+			break;
+
+		case CFG_RESCOUNT:
+			if ( c->value_int < 0 ) {
+				snprintf( c->cr_msg, sizeof( c->cr_msg ),
+					"max_responses_per_cycle=%d invalid",
+					c->value_int );
+				Debug(LDAP_DEBUG_ANY, "%s: %s.\n",
+					c->log, c->cr_msg, 0 );
+				return 1;
+			}
+			slap_conn_max_responses_per_cycle = c->value_int;
 			break;
 
 
