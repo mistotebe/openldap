@@ -71,6 +71,12 @@ LDAP_SLAPD_F (void) ch_free LDAP_P(( void * ));
 #endif
 
 /*
+ * bind.c
+ */
+LDAP_SLAPD_F (void *) client_reset LDAP_P(( void *ctx, void *arg ));
+LDAP_SLAPD_F (void *) client_bind LDAP_P(( void *ctx, void *arg ));
+
+/*
  * client.c
  */
 LDAP_SLAPD_F (Connection *) client_init LDAP_P((
@@ -80,6 +86,7 @@ LDAP_SLAPD_F (Connection *) client_init LDAP_P((
     struct event_base *base,
 	int use_tls ));
 LDAP_SLAPD_F (void) client_write_cb LDAP_P(( evutil_socket_t s, short what, void *arg ));
+LDAP_SLAPD_F (void) client_destroy LDAP_P(( Connection *c ));
 
 /*
  * config.c
@@ -205,9 +212,12 @@ parse_debug_unknowns LDAP_P(( char **unknowns, int *levelp ));
 LDAP_SLAPD_F (const char *) slap_msgtype2str LDAP_P(( ber_tag_t tag ));
 LDAP_SLAPD_F (int) operation_upstream_cmp LDAP_P(( const void *l, const void *r ));
 LDAP_SLAPD_F (int) operation_client_cmp LDAP_P(( const void *l, const void *r ));
-LDAP_SLAPD_F (void *) operation_process LDAP_P(( void *ctx, void *arg ));
 LDAP_SLAPD_F (Operation *) operation_init LDAP_P(( Connection *c, BerElement *ber ));
+LDAP_SLAPD_F (void) operation_abandon LDAP_P((Operation *op));
+LDAP_SLAPD_F (void) operation_send_reject LDAP_P(( Operation *op, int result, const char *msg ));
+LDAP_SLAPD_F (void) operation_lost_upstream LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_destroy LDAP_P((Operation *op));
+LDAP_SLAPD_F (void *) request_process LDAP_P(( void *ctx, void *arg ));
 
 /*
  * sl_malloc.c
@@ -245,6 +255,7 @@ LDAP_SLAPD_F (void) upstream_read_cb LDAP_P(( evutil_socket_t s, short what, voi
 LDAP_SLAPD_F (Connection *) upstream_init LDAP_P((
 	ber_socket_t s,
 	Backend* b ));
+LDAP_SLAPD_F (void) upstream_destroy LDAP_P(( Connection *c ));
 
 /*
  * user.c

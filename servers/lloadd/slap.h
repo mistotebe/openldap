@@ -286,6 +286,8 @@ struct Backend {
     LDAP_STAILQ_ENTRY(Backend) b_next;
 };
 
+typedef int (*OperationHandler) ( Operation *op, BerElement *ber );
+
 /* connection state (protected by c_mutex) */
 enum sc_state {
 	SLAP_C_INVALID = 0,	/* MUST BE ZERO (0) */
@@ -314,7 +316,11 @@ struct Connection {
     struct event            *c_read_event, *c_write_event;
 
     /* only can be changed by binding thread */
+    int                     c_features;
+#define SLAP_C_VC 1
     struct berval	        c_sasl_bind_mech;			/* mech in progress */
+    struct berval	        c_auth;	/* authcDN (possibly in progress) */
+    struct berval           c_vc_cookie;
 
     ldap_pvt_thread_mutex_t	c_write_mutex;	/* only one pdu written at a time */
 
