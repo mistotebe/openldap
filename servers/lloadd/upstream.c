@@ -147,8 +147,8 @@ handle_vc_bind_response( Operation *op, BerElement *ber )
     ber_len_t len;
     int rc = 0;
 
-    tag = ber_scanf( ber, "{i{emmt" /* "}}" */, &msgid,
-            &result, &matched, &diagmsg, &tag );
+    tag = ber_scanf( ber, "{emm" /* "}" */,
+            &result, &matched, &diagmsg );
     if ( tag == LBER_ERROR ) {
         rc = -1;
         goto done;
