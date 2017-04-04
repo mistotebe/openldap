@@ -243,9 +243,8 @@ done:
 }
 
 static int
-handle_unsolicited( Operation *op, BerElement *ber )
+handle_unsolicited( Connection *c, BerElement *ber )
 {
-    Connection *c = op->o_upstream;
     TAvlnode *root;
     int freed;
 
@@ -313,7 +312,7 @@ handle_one_response( Connection *c )
     }
 
     if ( needle.o_upstream_msgid == 0 ) {
-        handler = handle_unsolicited;
+        return handle_unsolicited( c, ber );
     } else if ( !(op = tavl_find( c->c_ops, &needle, operation_upstream_cmp )) ) {
         /* Already abandoned, do nothing */
     /*
