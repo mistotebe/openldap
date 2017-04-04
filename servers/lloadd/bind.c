@@ -160,7 +160,7 @@ request_bind_as_vc( Operation *op )
     tag = ber_peek_tag( copy, &len );
     switch ( tag ) {
         case LDAP_AUTH_SASL:
-            ber_get_stringbv( copy, &mech, 0 );
+            ber_get_stringbv( copy, &mech, LBER_BV_NOTERM );
             if ( ber_bvcmp( &mech, &c->c_sasl_bind_mech ) ) {
                 ber_memfree( c->c_sasl_bind_mech.bv_val );
                 ber_dupbv( &c->c_sasl_bind_mech, &mech );
