@@ -135,7 +135,7 @@ connection_init(
 
 #ifdef LDAP_DEBUG
     ber_sockbuf_add_io( c->c_sb, &ber_sockbuf_io_debug,
-            INT_MAX, (void*)"ldap_" );
+            INT_MAX, (void*)"balancer_" );
 #endif
 
 #ifdef HAVE_TLS
