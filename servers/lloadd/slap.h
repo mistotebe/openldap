@@ -257,6 +257,11 @@ enum {
     BALANCER_STARTTLS,
 };
 
+typedef enum {
+    SLAP_FEATURE_VC = 1 << 0,
+    SLAP_FEATURE_PROXYAUTHZ = 1 << 1,
+} slap_features_t;
+
 typedef struct slap_counters_t {
 	struct slap_counters_t	*sc_next;
 	ldap_pvt_thread_mutex_t	sc_mutex;
@@ -316,8 +321,6 @@ struct Connection {
     struct event            *c_read_event, *c_write_event;
 
     /* only can be changed by binding thread */
-    int                     c_features;
-#define SLAP_C_VC 1
     struct berval	        c_sasl_bind_mech;			/* mech in progress */
     struct berval	        c_auth;	/* authcDN (possibly in progress) */
     struct berval           c_vc_cookie;
