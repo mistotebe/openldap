@@ -401,6 +401,7 @@ handle_responses( void *ctx, void *arg )
             /* Error, connection might already have been destroyed */
             return NULL;
         }
+        /* Otherwise, handle_one_response leaves the connection locked */
 
         if ( ( ber = ber_alloc() ) == NULL )
         {
@@ -487,7 +488,9 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
             ldap_pvt_thread_pool_submit( &connection_pool, handle_responses, c ) ) {
         /* If we're overloaded or configured as such, process one and resume in
          * the next cycle */
-        handle_one_response( c );
+        if ( handle_one_response( c ) == LDAP_SUCCESS ) {
+            ldap_pvt_thread_mutex_unlock( &c->c_mutex );
+        }
         return;
     }
     event_del( c->c_read_event );
