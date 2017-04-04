@@ -278,6 +278,7 @@ typedef struct slap_counters_t {
 
 typedef struct Listener Listener;
 
+/* Can hold mutex when locking a linked connection */
 struct Backend {
     struct slap_bindconf b_bindconf;
     ldap_pvt_thread_mutex_t b_mutex;
@@ -325,6 +326,8 @@ struct Connection {
     struct berval	        c_auth;	/* authcDN (possibly in progress) */
     struct berval           c_vc_cookie;
 
+    /* Can be held while acquiring c_mutex to inject things into c_ops or
+     * destroy the connection */
     ldap_pvt_thread_mutex_t	c_write_mutex;	/* only one pdu written at a time */
 
     BerElement	            *c_currentber;	/* ber we're attempting to read */
