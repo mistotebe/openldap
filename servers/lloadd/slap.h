@@ -286,6 +286,10 @@ struct Backend {
     int b_proto, b_tls, b_port;
     char *b_host;
 
+    int b_retry_timeout, b_failed;
+    struct event *b_retry_event;
+    struct timeval b_retry_tv;
+
     int b_numconns, b_numbindconns;
     int b_bindavail, b_active, b_opening;
     LDAP_LIST_HEAD(ConnSt, Connection) b_conns, b_bindconns;
