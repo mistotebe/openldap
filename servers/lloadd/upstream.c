@@ -832,8 +832,8 @@ upstream_destroy( Connection *c )
     } else {
         b->b_active--;
     }
-    backend_retry( b );
     ldap_pvt_thread_mutex_unlock( &b->b_mutex );
+    backend_retry( b );
 
     ldap_pvt_thread_mutex_lock( &c->c_mutex );
 
