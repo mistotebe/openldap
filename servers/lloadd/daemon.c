@@ -1377,8 +1377,22 @@ slapd_daemon( struct event_base *daemon_base )
     }
 
     LDAP_STAILQ_FOREACH( b, &backend, b_next ) {
+        struct event *retry_event = evtimer_new( daemon_base, backend_connect, b );
+
+        if ( !retry_event ) {
+            Debug( LDAP_DEBUG_ANY, "failed to allocate retry event\n", 0, 0, 0 );
+            return -1;
+        }
+        b->b_retry_event = retry_event;
         b->b_opening++;
-        ldap_pvt_thread_pool_submit( &connection_pool, backend_connect, b );
+
+        rc = ldap_pvt_thread_pool_submit( &connection_pool, backend_connect_task, b );
+        if ( rc ) {
+            Debug( LDAP_DEBUG_ANY,
+                    "failed to schedule backend connection task (%d)\n",
+                    rc, 0, 0 );
+            return rc;
+        }
     }
 
     rc = event_base_dispatch( daemon_base );
