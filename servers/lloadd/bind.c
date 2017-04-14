@@ -297,6 +297,7 @@ client_bind( void *ctx, void *arg )
     }
 
     op->o_upstream = upstream;
+    op->o_upstream_connid = upstream->c_connid;
     if ( slap_features & SLAP_FEATURE_VC ) {
         rc = request_bind_as_vc( op );
     } else {
