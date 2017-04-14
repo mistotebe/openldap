@@ -258,24 +258,34 @@ static int
 handle_unsolicited( Connection *c, BerElement *ber )
 {
     TAvlnode *root;
-    int freed;
+    Backend *b;
+    long freed, executing;
 
     ldap_pvt_thread_mutex_lock( &c->c_mutex );
+    b = (Backend *)c->c_private;
+
     Debug( LDAP_DEBUG_CONNS, "handle_unsolicited: "
             "teardown for upstream connection %lu\n",
             c->c_connid, 0, 0 );
 
     root = c->c_ops;
     c->c_ops = NULL;
+    executing = c->c_n_ops_executing;
+    c->c_n_ops_executing = 0;
     ldap_pvt_thread_mutex_unlock( &c->c_mutex );
 
     freed = tavl_free( root, (AVL_FREE)operation_lost_upstream );
+    assert( freed == executing );
     Debug( LDAP_DEBUG_TRACE, "handle_unsolicited: "
-            "dropped %d operations\n", freed, 0, 0 );
+            "dropped %ld operations\n", freed, 0, 0 );
 
     ldap_pvt_thread_mutex_lock( &c->c_mutex );
     upstream_destroy( c );
     ber_free( ber, 1 );
+
+    ldap_pvt_thread_mutex_lock( &b->b_mutex );
+    b->b_n_ops_executing -= executing;
+    ldap_pvt_thread_mutex_unlock( &b->b_mutex );
 
     return -1;
 }
@@ -833,6 +843,7 @@ upstream_destroy( Connection *c )
     } else {
         b->b_active--;
     }
+    b->b_n_ops_executing -= c->c_n_ops_executing;
     ldap_pvt_thread_mutex_unlock( &b->b_mutex );
     backend_retry( b );
 

@@ -121,15 +121,28 @@ operation_destroy( Operation *op )
     if ( op->o_client ) {
         c = op->o_client;
         ldap_pvt_thread_mutex_lock( &c->c_mutex );
-        tavl_delete( &c->c_ops, op, operation_client_cmp );
+        if ( tavl_delete( &c->c_ops, op, operation_client_cmp ) ) {
+            c->c_n_ops_executing--;
+        }
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
     }
 
     if ( op->o_upstream ) {
+        Backend *b = NULL;
+
         c = op->o_upstream;
         ldap_pvt_thread_mutex_lock( &c->c_mutex );
-        tavl_delete( &c->c_ops, op, operation_upstream_cmp );
+        if ( tavl_delete( &c->c_ops, op, operation_upstream_cmp ) ) {
+            c->c_n_ops_executing--;
+            b = (Backend *)c->c_private;
+        }
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
+
+        if ( b ) {
+            ldap_pvt_thread_mutex_lock( &b->b_mutex );
+            b->b_n_ops_executing--;
+            ldap_pvt_thread_mutex_unlock( &b->b_mutex );
+        }
     }
 
     ch_free( op );
@@ -181,6 +194,7 @@ operation_init( Connection *c, BerElement *ber )
             "set up a new operation, %s with msgid=%d for client %lu\n",
             slap_msgtype2str(op->o_tag), op->o_client_msgid, op->o_client_connid );
 
+    c->c_n_ops_executing++;
     return op;
 
 fail:
@@ -199,6 +213,9 @@ operation_abandon( Operation *op )
 
         ldap_pvt_thread_mutex_lock( &c->c_mutex );
         rc = (tavl_delete( &c->c_ops, op, operation_upstream_cmp ) == NULL);
+        if ( !rc ) {
+            c->c_n_ops_executing--;
+        }
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
 
         if ( rc ) {
