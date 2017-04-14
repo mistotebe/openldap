@@ -235,17 +235,21 @@ done:
 }
 
 void
-operation_send_reject( Operation *op, int result, const char *msg )
+operation_send_reject( Operation *op, int result, const char *msg, int send_anyway )
 {
     Connection *c = op->o_client;
     BerElement *ber;
     int found;
 
+    Debug( LDAP_DEBUG_TRACE, "operation_send_reject: "
+            "rejecting %s from client %lu with message: \"%s\"\n",
+            slap_msgtype2str(op->o_tag), c->c_connid, msg );
+
     ldap_pvt_thread_mutex_lock( &c->c_mutex );
     found = (tavl_delete( &c->c_ops, op, operation_client_cmp ) == op);
     ldap_pvt_thread_mutex_unlock( &c->c_mutex );
 
-    if ( !found ) {
+    if ( !found && !send_anyway ) {
         return;
     }
 
@@ -274,7 +278,7 @@ void
 operation_lost_upstream( Operation *op )
 {
     operation_send_reject( op, LDAP_UNAVAILABLE,
-            "connection to the remote server has been severed" );
+            "connection to the remote server has been severed", 0 );
 }
 
 void *
@@ -347,6 +351,6 @@ fail:
     if ( upstream ) {
         ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
     }
-    operation_send_reject( op, LDAP_OTHER, "internal error" );
+    operation_send_reject( op, LDAP_OTHER, "internal error", 0 );
     return NULL;
 }

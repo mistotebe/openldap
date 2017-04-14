@@ -56,7 +56,7 @@ request_bind( Operation *op )
     } else if ( version != LDAP_VERSION3 ) {
         ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
         operation_send_reject( op, LDAP_PROTOCOL_ERROR,
-                "LDAP version unsupported" );
+                "LDAP version unsupported", 1 );
         ber_free( copy, 0 );
         return 0;
     }
@@ -283,7 +283,7 @@ client_bind( void *ctx, void *arg )
         Debug( LDAP_DEBUG_STATS, "client_bind: "
                 "no available connection found\n", 0, 0, 0 );
         operation_send_reject( op, LDAP_UNAVAILABLE,
-                "no connections available" );
+                "no connections available", 1 );
         return NULL;
     }
 
