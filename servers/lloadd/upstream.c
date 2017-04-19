@@ -570,7 +570,7 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
 {
     Connection *c = arg;
     BerElement *ber;
-    char *matcheddn = NULL, *message = NULL;
+    BerValue matcheddn, message;
     ber_tag_t tag;
     ber_len_t len;
     ber_int_t msgid, result;
@@ -621,7 +621,7 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
         goto fail;
     }
 
-    if ( ber_scanf( ber, "{eAA" /* "}" */, &result, &matcheddn, &message )
+    if ( ber_scanf( ber, "{emm" /* "}" */, &result, &matcheddn, &message )
             == LBER_ERROR ) {
         Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
                 "response does not conform with a bind response\n",
@@ -640,20 +640,16 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
         default:
             Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
                     "upstream bind failed, rc=%d, message='%s'\n",
-                    result, message, 0 );
+                    result, message.bv_val, 0 );
             goto fail;
     }
 
-    if ( matcheddn ) ber_memfree( matcheddn );
-    if ( message ) ber_memfree( message );
-
     ldap_pvt_thread_mutex_unlock( &c->c_mutex );
 
+    ber_free( ber, 1 );
     return;
-fail:
-    if ( matcheddn ) ber_memfree( matcheddn );
-    if ( message ) ber_memfree( message );
 
+fail:
     ber_free( ber, 1 );
     upstream_destroy( c );
 }

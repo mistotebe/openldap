@@ -114,6 +114,8 @@ fail:
                 "server error or overloaded", 1 );
         op->o_client = NULL;
         operation_destroy( op );
+    } else if ( ber ) {
+        ber_free( ber, 1 );
     }
 
     client_destroy( c );
