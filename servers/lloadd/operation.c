@@ -210,18 +210,24 @@ operation_abandon( Operation *op )
     if ( op->o_upstream ) {
         Connection *c = op->o_upstream;
         BerElement *ber;
+        Backend *b;
 
         ldap_pvt_thread_mutex_lock( &c->c_mutex );
         rc = (tavl_delete( &c->c_ops, op, operation_upstream_cmp ) == NULL);
         if ( !rc ) {
             c->c_n_ops_executing--;
         }
+        b = (Backend *)c->c_private;
         ldap_pvt_thread_mutex_unlock( &c->c_mutex );
 
         if ( rc ) {
             /* The operation has already been abandoned or finished */
             goto done;
         }
+
+        ldap_pvt_thread_mutex_lock( &b->b_mutex );
+        b->b_n_ops_executing--;
+        ldap_pvt_thread_mutex_unlock( &b->b_mutex );
 
         ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
 
