@@ -52,6 +52,7 @@ balancer_libevent_mutex_destroy( void *lock, unsigned locktype ) {
         rc = ldap_pvt_thread_mutex_destroy( mutex );
     }
     assert( rc == 0 );
+    ch_free( mutex );
 }
 
 static int
@@ -95,6 +96,7 @@ balancer_libevent_cond_destroy( void *c ) {
 
     rc = ldap_pvt_thread_cond_destroy( cond );
     assert( rc == 0 );
+    ch_free( c );
 }
 
 static int
