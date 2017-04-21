@@ -121,6 +121,7 @@ backend_select( Operation *op )
          * backend's connections? */
         LDAP_LIST_FOREACH( c, head, c_next ) {
             ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
+            CONNECTION_LOCK(c);
             if ( c->c_state == SLAP_C_READY && !c->c_pendingber
                     && ( b->b_max_conn_pending == 0
                         || c->c_n_ops_executing < b->b_max_conn_pending ) ) {
@@ -130,9 +131,11 @@ backend_select( Operation *op )
 
                 b->b_n_ops_executing++;
                 c->c_n_ops_executing++;
+                CONNECTION_UNLOCK_INCREF(c);
                 ldap_pvt_thread_mutex_unlock( &b->b_mutex );
                 return c;
             }
+            CONNECTION_UNLOCK(c);
             ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
         }
         ldap_pvt_thread_mutex_unlock( &b->b_mutex );

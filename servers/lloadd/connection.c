@@ -61,7 +61,10 @@ connection_destroy( Connection *c )
             "connection_destroy: destroying connection %lu.\n",
             c->c_connid, 0, 0 );
 
+    assert( c->c_live == 0 );
+    assert( c->c_refcnt == 0 );
     assert( c->c_state == SLAP_C_INVALID );
+
     evutil_closesocket( c->c_fd );
     ber_sockbuf_free( c->c_sb );
 
@@ -72,7 +75,7 @@ connection_destroy( Connection *c )
         ber_free( c->c_pendingber, 1 );
     }
 
-    ldap_pvt_thread_mutex_unlock( &c->c_mutex );
+    CONNECTION_UNLOCK(c);
 
     ldap_pvt_thread_mutex_destroy( &c->c_write_mutex );
     ldap_pvt_thread_mutex_destroy( &c->c_mutex );
@@ -154,6 +157,7 @@ connection_init(
 #endif
 
     c->c_next_msgid = 1;
+    c->c_refcnt = c->c_live = 1;
 
     ldap_pvt_thread_mutex_init( &c->c_mutex );
     ldap_pvt_thread_mutex_init( &c->c_write_mutex );
@@ -162,7 +166,7 @@ connection_init(
 
     Debug( LDAP_DEBUG_CONNS, "connection_init: connection %lu allocated for socket %d\n", c->c_connid, s, 0 );
 
-    ldap_pvt_thread_mutex_lock( &c->c_mutex );
+    CONNECTION_LOCK(c);
     c->c_state = SLAP_C_ACTIVE;
 
     return c;
