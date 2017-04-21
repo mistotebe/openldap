@@ -125,8 +125,8 @@ backend_select( Operation *op )
             if ( c->c_state == SLAP_C_READY && !c->c_pendingber
                     && ( b->b_max_conn_pending == 0
                         || c->c_n_ops_executing < b->b_max_conn_pending ) ) {
-                Debug( LDAP_DEBUG_CONNS, "backend_select:"
-                        " selected connection %lu for client %lu msgid=%d\n",
+                Debug( LDAP_DEBUG_CONNS, "backend_select: "
+                        "selected connection %lu for client %lu msgid=%d\n",
                         c->c_connid, op->o_client_connid, op->o_client_msgid );
 
                 b->b_n_ops_executing++;
