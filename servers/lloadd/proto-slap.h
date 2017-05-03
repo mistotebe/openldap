@@ -215,6 +215,7 @@ parse_debug_unknowns LDAP_P(( char **unknowns, int *levelp ));
 /*
  * operation.c
  */
+LDAP_SLAPD_V (ldap_pvt_thread_mutex_t) operation_mutex;
 LDAP_SLAPD_F (const char *) slap_msgtype2str LDAP_P(( ber_tag_t tag ));
 LDAP_SLAPD_F (int) operation_upstream_cmp LDAP_P(( const void *l, const void *r ));
 LDAP_SLAPD_F (int) operation_client_cmp LDAP_P(( const void *l, const void *r ));
@@ -222,7 +223,8 @@ LDAP_SLAPD_F (Operation *) operation_init LDAP_P(( Connection *c, BerElement *be
 LDAP_SLAPD_F (void) operation_abandon LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_send_reject LDAP_P(( Operation *op, int result, const char *msg, int send_anyway ));
 LDAP_SLAPD_F (void) operation_lost_upstream LDAP_P((Operation *op));
-LDAP_SLAPD_F (void) operation_destroy LDAP_P((Operation *op));
+LDAP_SLAPD_F (void) operation_destroy_from_client LDAP_P((Operation *op));
+LDAP_SLAPD_F (void) operation_destroy_from_upstream LDAP_P((Operation *op));
 LDAP_SLAPD_F (int) request_abandon LDAP_P(( Connection *c, Operation *op ));
 LDAP_SLAPD_F (int) request_process LDAP_P(( Connection *c, Operation *op ));
 
