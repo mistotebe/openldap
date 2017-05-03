@@ -75,7 +75,7 @@ ber_len_t sockbuf_max_incoming_auth= SLAP_SB_MAX_INCOMING_AUTH;
 int	slap_conn_max_pending = SLAP_CONN_MAX_PENDING_DEFAULT;
 int	slap_conn_max_pending_auth = SLAP_CONN_MAX_PENDING_AUTH;
 
-int slap_conn_max_responses_per_cycle = SLAP_CONN_MAX_RESPONSES_PER_CYCLE_DEFAULT;
+int slap_conn_max_pdus_per_cycle = SLAP_CONN_MAX_PDUS_PER_CYCLE_DEFAULT;
 
 char   *slapd_pid_file  = NULL;
 char   *slapd_args_file = NULL;
@@ -368,7 +368,7 @@ config_generic(ConfigArgs *c) {
 					c->log, c->cr_msg, 0 );
 				return 1;
 			}
-			slap_conn_max_responses_per_cycle = c->value_int;
+			slap_conn_max_pdus_per_cycle = c->value_int;
 			break;
 
 

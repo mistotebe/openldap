@@ -395,7 +395,7 @@ fail:
  * we received.
  *
  * We run handle_one_response on each response, stopping once we hit an error,
- * have to wait on reading or process slap_conn_max_responses_per_cycle
+ * have to wait on reading or process slap_conn_max_pdus_per_cycle
  * responses so as to maintain fairness and not hog the worker thread forever.
  *
  * If we've run out of responses from the upstream or hit the budget, we unmute
@@ -409,7 +409,7 @@ handle_responses( void *ctx, void *arg )
     int responses_handled = 0;
 
     CONNECTION_LOCK(c);
-    for ( ; responses_handled < slap_conn_max_responses_per_cycle; responses_handled++ ) {
+    for ( ; responses_handled < slap_conn_max_pdus_per_cycle; responses_handled++ ) {
         BerElement *ber;
         ber_tag_t tag;
         ber_len_t len;
@@ -504,7 +504,7 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
         return;
     }
 
-    if ( !slap_conn_max_responses_per_cycle ||
+    if ( !slap_conn_max_pdus_per_cycle ||
             ldap_pvt_thread_pool_submit( &connection_pool, handle_responses, c ) ) {
         /* If we're overloaded or configured as such, process one and resume in
          * the next cycle.

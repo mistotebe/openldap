@@ -75,12 +75,14 @@ LDAP_SLAPD_F (void) ch_free LDAP_P(( void * ));
 /*
  * bind.c
  */
-LDAP_SLAPD_F (void *) client_reset LDAP_P(( void *ctx, void *arg ));
-LDAP_SLAPD_F (void *) client_bind LDAP_P(( void *ctx, void *arg ));
+LDAP_SLAPD_F (void) client_reset LDAP_P(( Connection *c ));
+LDAP_SLAPD_F (int) client_bind LDAP_P(( Connection *c, Operation *op ));
 
 /*
  * client.c
  */
+LDAP_SLAPD_F (void *) handle_requests LDAP_P(( void *ctx, void *arg ));
+LDAP_SLAPD_F (int) handle_one_request LDAP_P(( Connection *c ));
 LDAP_SLAPD_F (Connection *) client_init LDAP_P((
 	ber_socket_t s,
 	Listener* url,
@@ -219,7 +221,8 @@ LDAP_SLAPD_F (void) operation_abandon LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_send_reject LDAP_P(( Operation *op, int result, const char *msg, int send_anyway ));
 LDAP_SLAPD_F (void) operation_lost_upstream LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_destroy LDAP_P((Operation *op));
-LDAP_SLAPD_F (void *) request_process LDAP_P(( void *ctx, void *arg ));
+LDAP_SLAPD_F (int) request_abandon LDAP_P(( Connection *c, Operation *op ));
+LDAP_SLAPD_F (int) request_process LDAP_P(( Connection *c, Operation *op ));
 
 /*
  * sl_malloc.c
@@ -294,7 +297,7 @@ LDAP_SLAPD_V (ber_len_t) sockbuf_max_incoming;
 LDAP_SLAPD_V (ber_len_t) sockbuf_max_incoming_auth;
 LDAP_SLAPD_V (int)		slap_conn_max_pending;
 LDAP_SLAPD_V (int)		slap_conn_max_pending_auth;
-LDAP_SLAPD_V (int)      slap_conn_max_responses_per_cycle;
+LDAP_SLAPD_V (int)      slap_conn_max_pdus_per_cycle;
 
 LDAP_SLAPD_V (slap_features_t) slap_features;
 
