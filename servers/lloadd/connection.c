@@ -166,7 +166,9 @@ connection_init(
 
     connection_assign_nextid( c );
 
-    Debug( LDAP_DEBUG_CONNS, "connection_init: connection %lu allocated for socket %d\n", c->c_connid, s, 0 );
+    Debug( LDAP_DEBUG_CONNS, "connection_init: "
+            "connection connid=%lu allocated for socket fd=%d\n",
+            c->c_connid, s, 0 );
 
     CONNECTION_LOCK(c);
     c->c_state = SLAP_C_ACTIVE;

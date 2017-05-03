@@ -93,6 +93,9 @@ request_bind( Operation *op )
             LDAP_REQ_BIND, &op->o_request,
             LDAP_TAG_CONTROLS, BER_BV_OPTIONAL( &op->o_ctrls ) );
 
+    Debug( LDAP_DEBUG_TRACE, "request_bind: "
+            "added bind from client connid=%lu to upstream connid=%lu as msgid=%d\n",
+            op->o_client_connid, op->o_upstream_connid, op->o_upstream_msgid );
     if ( tavl_insert( &upstream->c_ops, op, operation_upstream_cmp, avl_dup_error ) ) {
         assert( 0 );
     }
@@ -217,6 +220,9 @@ request_bind_as_vc( Operation *op )
     }
 
     CONNECTION_LOCK(upstream);
+    Debug( LDAP_DEBUG_TRACE, "request_bind_as_vc: "
+            "added bind from client connid=%lu to upstream connid=%lu as VC exop msgid=%d\n",
+            op->o_client_connid, op->o_upstream_connid, op->o_upstream_msgid );
     if ( tavl_insert( &upstream->c_ops, op, operation_upstream_cmp, avl_dup_error ) ) {
         assert( 0 );
     }

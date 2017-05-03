@@ -595,7 +595,8 @@ request_process( Connection *client, Operation *op )
     rc = tavl_insert( &upstream->c_ops, op, operation_upstream_cmp, avl_dup_error );
     Debug( LDAP_DEBUG_TRACE, "request_process: "
             "added %s msgid=%d to upstream connid=%lu\n",
-            slap_msgtype2str(op->o_tag), op->o_upstream_msgid, op->o_upstream_connid );
+            slap_msgtype2str(op->o_tag), op->o_upstream_msgid,
+            op->o_upstream_connid );
     assert( rc == LDAP_SUCCESS );
 
     if ( slap_features & SLAP_FEATURE_PROXYAUTHZ ) {
