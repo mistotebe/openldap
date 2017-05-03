@@ -45,6 +45,7 @@ LDAP_SLAPD_F (void) backend_connect LDAP_P (( evutil_socket_t s, short what, voi
 LDAP_SLAPD_F (void *) backend_connect_task LDAP_P (( void *ctx, void *arg ));
 LDAP_SLAPD_F (void) backend_retry LDAP_P (( Backend *b ));
 LDAP_SLAPD_F (Connection *) backend_select LDAP_P (( Operation *op ));
+LDAP_SLAPD_F (void) backends_destroy LDAP_P ((void));
 
 /*
  * bconfig.c
@@ -197,6 +198,7 @@ LDAP_SLAPD_V (char *)	slap_known_controls[];
  * libevent_support.c
  */
 LDAP_SLAPD_F (int) balancer_libevent_init LDAP_P((void));
+LDAP_SLAPD_F (void) balancer_libevent_destroy LDAP_P((void));
 
 /*
  * main.c

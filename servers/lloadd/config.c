@@ -2765,6 +2765,7 @@ config_destroy( )
 		free ( slapd_args_file );
 	if ( slapd_pid_file )
 		free ( slapd_pid_file );
+    loglevel_destroy();
 }
 
 char **
