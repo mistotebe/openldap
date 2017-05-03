@@ -342,6 +342,8 @@ handle_one_response( Connection *c )
         return handle_unsolicited( c, ber );
     } else if ( !(op = tavl_find( c->c_ops, &needle, operation_upstream_cmp )) ) {
         /* Already abandoned, do nothing */
+        ber_free( ber, 1 );
+        return rc;
     /*
     } else if ( op->o_response_pending ) {
         c->c_pendingop = op;
