@@ -161,7 +161,7 @@ connection_init(
     c->c_next_msgid = 1;
     c->c_refcnt = c->c_live = 1;
 
-    LDAP_LIST_ENTRY_INIT( c, c_next );
+    LDAP_CIRCLEQ_ENTRY_INIT( c, c_next );
 
     ldap_pvt_thread_mutex_init( &c->c_mutex );
     ldap_pvt_thread_mutex_init( &c->c_write_mutex );

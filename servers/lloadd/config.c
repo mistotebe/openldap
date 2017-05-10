@@ -112,7 +112,7 @@ static ConfigDriver config_tls_config;
 #endif
 
 int			nBackend = 0;
-slap_b_head backend = LDAP_STAILQ_HEAD_INITIALIZER(backend);
+slap_b_head backend = LDAP_CIRCLEQ_HEAD_INITIALIZER(backend);
 
 enum {
 	CFG_ACL = 1,
@@ -390,8 +390,8 @@ config_backend(ConfigArgs *c) {
 
     b = ch_calloc( 1, sizeof(Backend) );
 
-    LDAP_LIST_INIT( &b->b_conns );
-    LDAP_LIST_INIT( &b->b_bindconns );
+    LDAP_CIRCLEQ_INIT( &b->b_conns );
+    LDAP_CIRCLEQ_INIT( &b->b_bindconns );
 
     b->b_numconns = 1;
     b->b_numbindconns = 1;
@@ -511,7 +511,7 @@ done:
     if ( rc ) {
         ch_free( b );
     } else {
-        LDAP_STAILQ_INSERT_TAIL(&backend, b, b_next);
+        LDAP_CIRCLEQ_INSERT_TAIL( &backend, b, b_next );
     }
 
     return rc;
