@@ -128,6 +128,8 @@ typedef LDAP_CIRCLEQ_HEAD(BeSt, Backend) slap_b_head;
 
 LDAP_SLAPD_V (int) nBackend;
 LDAP_SLAPD_V (slap_b_head) backend;
+LDAP_SLAPD_V (ldap_pvt_thread_mutex_t) backend_mutex;
+LDAP_SLAPD_V (Backend *) current_backend;
 
 LDAP_SLAPD_V (int) slapMode;
 #define SLAP_UNDEFINED_MODE	0x0000
