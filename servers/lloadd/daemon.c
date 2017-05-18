@@ -1362,10 +1362,6 @@ slapd_daemon( struct event_base *daemon_base )
 
     daemon_tid = ch_malloc(slapd_daemon_threads * sizeof(ldap_pvt_thread_t));
 
-    if ( (rc = slap_listener_activate()) != 0) {
-        return rc;
-    }
-
     for ( i=0; i<slapd_daemon_threads; i++ )
     {
         base = event_base_new();
@@ -1385,6 +1381,10 @@ slapd_daemon( struct event_base *daemon_base )
                     "listener ldap_pvt_thread_create failed (%d)\n", rc, 0, 0 );
             return rc;
         }
+    }
+
+    if ( (rc = slap_listener_activate()) != 0) {
+        return rc;
     }
 
     current_backend = LDAP_CIRCLEQ_FIRST( &backend );
