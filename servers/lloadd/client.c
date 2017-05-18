@@ -62,9 +62,11 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
         int err = sock_errno();
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
-            Debug( LDAP_DEBUG_ANY, "client_read_cb: "
-                    "ber_get_next on fd %d failed errno=%d (%s)\n",
-                    c->c_fd, err, sock_errstr(err) );
+            if ( err ) {
+                Debug( LDAP_DEBUG_ANY, "client_read_cb: "
+                        "ber_get_next on fd %d failed errno=%d (%s)\n",
+                        c->c_fd, err, sock_errstr(err) );
+            }
 
             c->c_currentber = NULL;
             ber_free( ber, 1 );
@@ -130,9 +132,11 @@ handle_requests( void *ctx, void *arg )
             int err = sock_errno();
 
             if ( err != EWOULDBLOCK && err != EAGAIN ) {
-                Debug( LDAP_DEBUG_ANY, "handle_requests: "
-                        "ber_get_next on fd %d failed errno=%d (%s)\n",
-                        c->c_fd, err, sock_errstr(err) );
+                if ( err ) {
+                    Debug( LDAP_DEBUG_ANY, "handle_requests: "
+                            "ber_get_next on fd %d failed errno=%d (%s)\n",
+                            c->c_fd, err, sock_errstr(err) );
+                }
 
                 c->c_currentber = NULL;
                 ber_free( ber, 1 );
@@ -222,8 +226,12 @@ client_write_cb( evutil_socket_t s, short what, void *arg )
     /* We might have been beaten to flushing the data by another thread */
     if ( c->c_pendingber && ber_flush( c->c_sb, c->c_pendingber, 1 ) ) {
         int err = sock_errno();
+
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
             ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
+            Debug( LDAP_DEBUG_ANY, "client_write_cb: "
+                    "ber_flush on fd %d failed errno=%d (%s)\n",
+                    c->c_fd, err, sock_errstr(err) );
             CLIENT_LOCK_DESTROY(c);
             return;
         }

@@ -525,9 +525,11 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
         int err = sock_errno();
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
-            Debug( LDAP_DEBUG_ANY, "upstream_read_cb: "
-                    "ber_get_next on fd %d failed errno=%d (%s)\n",
-                    c->c_fd, err, sock_errstr(err) );
+            if ( err ) {
+                Debug( LDAP_DEBUG_ANY, "upstream_read_cb: "
+                        "ber_get_next on fd %d failed errno=%d (%s)\n",
+                        c->c_fd, err, sock_errstr(err) );
+            }
 
             c->c_currentber = NULL;
             ber_free( ber, 1 );
@@ -707,10 +709,11 @@ upstream_write_cb( evutil_socket_t s, short what, void *arg )
     /* We might have been beaten to flushing the data by another thread */
     if ( c->c_pendingber && ber_flush( c->c_sb, c->c_pendingber, 1 ) ) {
         int err = sock_errno();
+
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
             Debug( LDAP_DEBUG_ANY, "upstream_write_cb: "
-                    "error writing to connection %ld\n",
-                    c->c_connid, 0, 0 );
+                    "ber_flush on fd %d failed errno=%d (%s)\n",
+                    c->c_fd, err, sock_errstr(err) );
             ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
             UPSTREAM_LOCK_DESTROY(c);
             return;
