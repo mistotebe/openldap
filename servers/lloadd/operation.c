@@ -434,7 +434,7 @@ operation_init( Connection *c, BerElement *ber )
     }
 
     Debug( LDAP_DEBUG_TRACE, "operation_init: "
-            "set up a new operation, %s with msgid=%d for client %lu\n",
+            "set up a new operation, %s with msgid=%d for client connid=%lu\n",
             slap_msgtype2str(op->o_tag), op->o_client_msgid, op->o_client_connid );
 
     c->c_n_ops_executing++;
@@ -622,8 +622,8 @@ request_process( Connection *client, Operation *op )
     upstream = backend_select( op );
     if ( !upstream ) {
         Debug( LDAP_DEBUG_STATS, "request_process: "
-                "no available connection found\n",
-                0, 0, 0 );
+                "connid=%lu, msgid=%d no available connection found\n",
+                op->o_client_connid, op->o_client_msgid, 0 );
         goto fail;
     }
     op->o_upstream = upstream;

@@ -182,6 +182,9 @@ handle_one_request( Connection *c )
             /* There is never a response for this operation */
             operation_destroy_from_client( op );
             c->c_state = SLAP_C_CLOSING;
+            Debug( LDAP_DEBUG_STATS, "handle_one_request: "
+                    "received unbind, closing client connid=%lu\n",
+                    c->c_connid, 0, 0 );
             CLIENT_DESTROY(c);
             return -1;
         case LDAP_REQ_BIND:
@@ -311,7 +314,8 @@ void
 client_destroy( Connection *c )
 {
     Debug( LDAP_DEBUG_CONNS, "client_destroy: "
-            "destroying client %lu\n", c->c_connid, 0, 0 );
+            "destroying client connid=%lu\n",
+            c->c_connid, 0, 0 );
 
     if ( c->c_read_event ) {
         event_free( c->c_read_event );
