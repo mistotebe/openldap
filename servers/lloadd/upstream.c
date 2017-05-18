@@ -264,11 +264,9 @@ static int
 handle_unsolicited( Connection *c, BerElement *ber )
 {
     TAvlnode *root;
-    Backend *b;
     long freed, executing;
 
     CONNECTION_LOCK(c);
-    b = (Backend *)c->c_private;
 
     Debug( LDAP_DEBUG_CONNS, "handle_unsolicited: "
             "teardown for upstream connection %lu\n",
