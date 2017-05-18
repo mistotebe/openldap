@@ -436,6 +436,7 @@ struct Connection {
 };
 
 enum op_state {
+    SLAP_OP_NOT_FREEING = 0,
     SLAP_OP_FREEING_UPSTREAM = 1 << 0,
     SLAP_OP_FREEING_CLIENT = 1 << 1,
 };
