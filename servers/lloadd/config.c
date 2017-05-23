@@ -285,7 +285,7 @@ static ConfigTable config_back_cf_table[] = {
 #endif
     },
 	{ "TLSECName", NULL, 2, 2, 0,
-#ifdef HAVE_TLS
+#if defined(HAVE_TLS) && defined(LDAP_OPT_X_TLS_ECNAME)
 		CFG_TLS_ECNAME|ARG_STRING|ARG_MAGIC, &config_tls_option,
 #else
 		ARG_IGNORED, NULL,
@@ -1152,7 +1152,9 @@ config_tls_option(ConfigArgs *c) {
 	case CFG_TLS_CA_PATH:	flag = LDAP_OPT_X_TLS_CACERTDIR;	break;
 	case CFG_TLS_CA_FILE:	flag = LDAP_OPT_X_TLS_CACERTFILE;	break;
 	case CFG_TLS_DH_FILE:	flag = LDAP_OPT_X_TLS_DHFILE;	break;
+#ifdef LDAP_OPT_X_TLS_ECNAME
 	case CFG_TLS_ECNAME:	flag = LDAP_OPT_X_TLS_ECNAME;	break;
+#endif
 #ifdef HAVE_GNUTLS
 	case CFG_TLS_CRL_FILE:	flag = LDAP_OPT_X_TLS_CRLFILE;	break;
 #endif
