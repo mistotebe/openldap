@@ -1095,7 +1095,9 @@ config_include(ConfigArgs *c) {
 static int
 config_feature(ConfigArgs *c) {
     slap_verbmasks features[] = {
+#ifdef LDAP_API_FEATURE_VERIFY_CREDENTIALS
         { BER_BVC("vc"),            SLAP_FEATURE_VC },
+#endif /* LDAP_API_FEATURE_VERIFY_CREDENTIALS */
         { BER_BVC("proxyauthz"),    SLAP_FEATURE_PROXYAUTHZ },
         { BER_BVNULL, 0 }
     };

@@ -260,7 +260,9 @@ enum {
 };
 
 typedef enum {
+#ifdef LDAP_API_FEATURE_VERIFY_CREDENTIALS
     SLAP_FEATURE_VC = 1 << 0,
+#endif /* LDAP_API_FEATURE_VERIFY_CREDENTIALS */
     SLAP_FEATURE_PROXYAUTHZ = 1 << 1,
 } slap_features_t;
 
