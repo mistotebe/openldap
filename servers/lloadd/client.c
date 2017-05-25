@@ -24,6 +24,9 @@
 #include "lutil.h"
 #include "slap.h"
 
+LDAP_CIRCLEQ_HEAD(ClientSt, Connection) clients = LDAP_CIRCLEQ_HEAD_INITIALIZER(clients);
+ldap_pvt_thread_mutex_t clients_mutex;
+
 typedef int (*RequestHandler) ( Connection *c, Operation *op );
 
 static void
@@ -282,6 +285,10 @@ client_init(
     /* We only register the write event when we have data pending */
     c->c_write_event = event;
 
+    ldap_pvt_thread_mutex_lock( &clients_mutex );
+    LDAP_CIRCLEQ_INSERT_TAIL( &clients, c, c_next );
+    ldap_pvt_thread_mutex_unlock( &clients_mutex );
+
     c->c_private = listener;
     CONNECTION_UNLOCK(c);
 
@@ -337,5 +344,31 @@ client_destroy( Connection *c )
         CONNECTION_UNLOCK(c);
         return;
     }
+
+    ldap_pvt_thread_mutex_lock( &clients_mutex );
+    LDAP_CIRCLEQ_REMOVE( &clients, c, c_next );
+    ldap_pvt_thread_mutex_unlock( &clients_mutex );
+
     connection_destroy( c );
+}
+
+void
+clients_destroy( void )
+{
+    ldap_pvt_thread_mutex_lock( &clients_mutex );
+    while ( !LDAP_CIRCLEQ_EMPTY( &clients ) ) {
+        Connection *c = LDAP_CIRCLEQ_FIRST( &clients );
+
+        ldap_pvt_thread_mutex_unlock( &clients_mutex );
+        CONNECTION_LOCK(c);
+        /* We have shut down all processing, a dying connection connection
+         * should have been reclaimed by now! */
+        assert( c->c_live );
+        /* Upstream connections have already been destroyed, there should be no
+         * ops left */
+        assert( !c->c_ops );
+        CLIENT_DESTROY(c);
+        ldap_pvt_thread_mutex_lock( &clients_mutex );
+    }
+    ldap_pvt_thread_mutex_unlock( &clients_mutex );
 }
