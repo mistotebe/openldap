@@ -654,8 +654,11 @@ request_process( Connection *client, Operation *op )
     }
     upstream->c_pendingber = output;
 
+    CONNECTION_LOCK_DECREF(upstream);
     op->o_upstream_msgid = msgid = upstream->c_next_msgid++;
     rc = tavl_insert( &upstream->c_ops, op, operation_upstream_cmp, avl_dup_error );
+    CONNECTION_UNLOCK_INCREF(upstream);
+
     Debug( LDAP_DEBUG_TRACE, "request_process: "
             "added %s msgid=%d to upstream connid=%lu\n",
             slap_msgtype2str(op->o_tag), op->o_upstream_msgid,
