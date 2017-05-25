@@ -191,7 +191,7 @@ operation_destroy_from_client( Operation *op )
          * o_freeing again).
          */
         if ( !detach_client && race_state == SLAP_OP_FREEING_UPSTREAM ) {
-            Debug( LDAP_DEBUG_ANY, "operation_destroy_from_client: "
+            Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_client: "
                     "op=%p lost race, increasing client refcnt c=%p\n",
                     op, client, 0 );
             CONNECTION_LOCK(client);
@@ -220,7 +220,7 @@ operation_destroy_from_client( Operation *op )
          * decref and see whether we are in charge of freeing it
          */
         upstream->c_refcnt--;
-        Debug( LDAP_DEBUG_ANY, "operation_destroy_from_client: "
+        Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_client: "
                 "op=%p other side lost race with us\n", op, 0, 0 );
     }
     ldap_pvt_thread_mutex_unlock( &op->o_mutex );
@@ -333,7 +333,7 @@ operation_destroy_from_upstream( Operation *op )
          * o_freeing again).
          */
         if ( !detach_upstream && race_state == SLAP_OP_FREEING_CLIENT ) {
-            Debug( LDAP_DEBUG_ANY, "operation_destroy_from_upstream: "
+            Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_upstream: "
                     "op=%p lost race, increasing upstream refcnt c=%p\n",
                     op, upstream, 0 );
             CONNECTION_LOCK(upstream);
@@ -361,7 +361,7 @@ operation_destroy_from_upstream( Operation *op )
          * decref and see whether we are in charge of freeing it
          */
         client->c_refcnt--;
-        Debug( LDAP_DEBUG_ANY, "operation_destroy_from_upstream: "
+        Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_upstream: "
                 "op=%p other side lost race with us\n", op, 0, 0 );
     }
 
