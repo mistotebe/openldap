@@ -144,6 +144,7 @@ DYNAMICCONF=$DATADIR/slapd-dynamic.ldif
 
 LLOADDCONF=$DATADIR/lloadd.conf
 LLOADDANONCONF=$DATADIR/lloadd-anon.conf
+LLOADDUNREACHABLECONF=$DATADIR/lloadd-backend-issues.conf
 
 # generated files
 CONF1=$TESTDIR/slapd.1.conf
