@@ -696,9 +696,27 @@ Here is a short example of a configuration file:
 argsfile  LOCALSTATEDIR/run/lloadd.args
 pidfile   LOCALSTATEDIR/run/lloadd.pid
 
-backend  mdb
+backend
+    uri=ldap://ldap1.example.com
+    bindmethod=simple
+    binddn=cn=test
+    credentials=pass
+    numconns=3
+    bindconns=2
+    retry=5000
+    max-pending-ops=5
+    conn-max-pending=3
 
-backend  ldap
+backend
+    uri=ldap://ldap2.example.com
+    bindmethod=simple
+    binddn=cn=test
+    credentials=pass
+    numconns=3
+    bindconns=2
+    retry=5000
+    max-pending-ops=5
+    conn-max-pending=3
 .fi
 .RE
 .LP
