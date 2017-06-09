@@ -80,8 +80,6 @@ int slap_conn_max_pdus_per_cycle = SLAP_CONN_MAX_PDUS_PER_CYCLE_DEFAULT;
 char   *slapd_pid_file  = NULL;
 char   *slapd_args_file = NULL;
 
-int use_reverse_lookup = 0;
-
 static int fp_getline(FILE *fp, ConfigArgs *c);
 static void fp_getline_init(ConfigArgs *c);
 
