@@ -67,6 +67,9 @@ int		global_idletimeout = 0;
 int		global_writetimeout = 0;
 char	*global_host = NULL;
 
+static FILE *logfile;
+static char	*logfileName;
+
 slap_features_t slap_features;
 
 ber_len_t sockbuf_max_incoming = SLAP_SB_MAX_INCOMING_DEFAULT;
@@ -358,6 +361,13 @@ config_generic(ConfigArgs *c) {
 			slapd_daemon_threads = mask+1;
 			}
 			break;
+
+		case CFG_LOGFILE: {
+				if ( logfileName ) ch_free( logfileName );
+				logfileName = c->value_string;
+				logfile = fopen(logfileName, "w");
+				if(logfile) lutil_debug_file(logfile);
+			} break;
 
 		case CFG_RESCOUNT:
 			if ( c->value_int < 0 ) {
