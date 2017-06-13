@@ -130,6 +130,7 @@ LDAP_SLAPD_V (int) nBackend;
 LDAP_SLAPD_V (slap_b_head) backend;
 LDAP_SLAPD_V (ldap_pvt_thread_mutex_t) backend_mutex;
 LDAP_SLAPD_V (Backend *) current_backend;
+LDAP_SLAPD_V (struct slap_bindconf) bindconf;
 
 LDAP_SLAPD_V (int) slapMode;
 #define SLAP_UNDEFINED_MODE	0x0000
@@ -284,9 +285,9 @@ typedef struct Listener Listener;
 
 /* Can hold mutex when locking a linked connection */
 struct Backend {
-    struct slap_bindconf b_bindconf;
     ldap_pvt_thread_mutex_t b_mutex;
 
+    struct berval b_uri;
     int b_proto, b_tls, b_port;
     char *b_host;
 

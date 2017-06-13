@@ -100,6 +100,7 @@ static ConfigFile *cfn;
 static ConfigDriver config_fname;
 static ConfigDriver config_generic;
 static ConfigDriver config_backend;
+static ConfigDriver config_bindconf;
 #ifdef LDAP_TCP_BUFFER
 static ConfigDriver config_tcp_buffer;
 #endif /* LDAP_TCP_BUFFER */
@@ -117,10 +118,12 @@ slap_b_head backend = LDAP_CIRCLEQ_HEAD_INITIALIZER(backend);
 ldap_pvt_thread_mutex_t backend_mutex;
 Backend *current_backend = NULL;
 
+struct slap_bindconf bindconf = {};
+
 enum {
 	CFG_ACL = 1,
 	CFG_BACKEND,
-	CFG_DATABASE,
+	CFG_BINDCONF,
 	CFG_TLS_RAND,
 	CFG_TLS_CIPHER,
 	CFG_TLS_PROTOCOL_MIN,
@@ -158,8 +161,10 @@ static ConfigTable config_back_cf_table[] = {
 		&slap_conn_max_pending },
 	{ "conn_max_pending_auth", "max", 2, 2, 0, ARG_INT,
 		&slap_conn_max_pending_auth },
-	{ "backend", "type", 2, 0, 0, ARG_MAGIC|CFG_DATABASE,
+	{ "backend", "backend options", 2, 0, 0, ARG_MAGIC|CFG_BACKEND,
 		&config_backend },
+	{ "bindconf", "backend credentials", 2, 0, 0, ARG_MAGIC|CFG_BINDCONF,
+		&config_bindconf },
 	{ "gentlehup", "on|off", 2, 2, 0,
 #ifdef SIGHUP
 		ARG_ON_OFF, &global_gentlehup,
@@ -407,25 +412,10 @@ config_backend(ConfigArgs *c) {
     b->b_numbindconns = 1;
 
     for ( i=1; i < c->argc; i++ ) {
-        if ( bindconf_parse( c->argv[i], b ) ) {
+        if ( backend_parse( c->argv[i], b ) ) {
             Debug( LDAP_DEBUG_ANY, "config_backend: error parsing backend configuration item '%s'\n", c->argv[i], 0, 0 );
-            rc = -1;
-            goto done;
+            return -1;
         }
-    }
-
-    bindconf_tls_defaults( &b->b_bindconf );
-
-    if ( b->b_bindconf.sb_method == LDAP_AUTH_SASL ) {
-#ifndef HAVE_CYRUS_SASL
-        Debug( LDAP_DEBUG_ANY, "config_backend: no sasl support available\n", 0, 0, 0 );
-        rc = -1;
-        goto done;
-#else /* HAVE_CYRUS_SASL */
-        Debug( LDAP_DEBUG_ANY, "config_backend: no sasl support yet\n", 0, 0, 0 );
-        rc = -1;
-        goto done;
-#endif
     }
 
     if ( b->b_numconns <= 0 ) {
@@ -448,17 +438,17 @@ config_backend(ConfigArgs *c) {
     b->b_retry_tv.tv_sec = b->b_retry_timeout / 1000;
     b->b_retry_tv.tv_usec = ( b->b_retry_timeout % 1000 ) * 1000;
 
-    if ( BER_BVISNULL( &b->b_bindconf.sb_uri ) ) {
+    if ( BER_BVISNULL( &b->b_uri ) ) {
         Debug( LDAP_DEBUG_ANY, "config_backend: backend address not specified\n", 0, 0, 0 );
         rc = -1;
         goto done;
     }
 
-    rc = ldap_url_parse( b->b_bindconf.sb_uri.bv_val, &lud );
+    rc = ldap_url_parse( b->b_uri.bv_val, &lud );
     if( rc != LDAP_URL_SUCCESS ) {
         Debug( LDAP_DEBUG_ANY,
                 "config_backend: listen URL \"%s\" parse error=%d\n",
-                b->b_bindconf.sb_uri.bv_val, rc, 0 );
+                b->b_uri.bv_val, rc, 0 );
         rc = -1;
         goto done;
     }
@@ -466,7 +456,7 @@ config_backend(ConfigArgs *c) {
 #ifndef HAVE_TLS
     if( ldap_pvt_url_scheme2tls( lud->lud_scheme ) ) {
         Debug( LDAP_DEBUG_ANY, "config_backend: TLS not supported (%s)\n",
-                b->b_bindconf.sb_uri.bv_val, 0, 0 );
+                b->b_uri.bv_val, 0, 0 );
         rc = -1;
         goto done;
     }
@@ -505,7 +495,7 @@ config_backend(ConfigArgs *c) {
 #endif /* ! LDAP_PF_LOCAL */
     } else {
         if ( lud->lud_host == NULL || lud->lud_host[0] == '\0' ) {
-            Debug( LDAP_DEBUG_ANY, "config_backend: backend url missing hostname: '%s'\n", b->b_bindconf.sb_uri.bv_val, 0, 0 );
+            Debug( LDAP_DEBUG_ANY, "config_backend: backend url missing hostname: '%s'\n", b->b_uri.bv_val, 0, 0 );
             rc = -1;
             goto done;
         }
@@ -525,6 +515,32 @@ done:
     }
 
     return rc;
+}
+
+static int
+config_bindconf(ConfigArgs *c) {
+    int i;
+
+    for ( i=1; i < c->argc; i++ ) {
+        if ( bindconf_parse( c->argv[i], &bindconf ) ) {
+            Debug( LDAP_DEBUG_ANY, "config_bindconf: error parsing backend configuration item '%s'\n", c->argv[i], 0, 0 );
+            return -1;
+        }
+    }
+
+    bindconf_tls_defaults( &bindconf );
+
+    if ( bindconf.sb_method == LDAP_AUTH_SASL ) {
+#ifndef HAVE_CYRUS_SASL
+        Debug( LDAP_DEBUG_ANY, "config_bindconf: no sasl support available\n", 0, 0, 0 );
+        return -1;
+#else /* HAVE_CYRUS_SASL */
+        Debug( LDAP_DEBUG_ANY, "config_bindconf: no sasl support yet\n", 0, 0, 0 );
+        return -1;
+#endif
+    }
+
+    return 0;
 }
 
 static int
@@ -2155,43 +2171,8 @@ slap_keepalive_parse(
 	return 0;
 }
 
-static int
-slap_sb_uri(
-	struct berval *val,
-	void *bcp,
-	slap_cf_aux_table *tab0,
-	const char *tabmsg,
-	int unparse )
-{
-	slap_bindconf *bc = bcp;
-	if ( unparse ) {
-		if ( bc->sb_uri.bv_len >= val->bv_len )
-			return -1;
-		val->bv_len = bc->sb_uri.bv_len;
-		AC_MEMCPY( val->bv_val, bc->sb_uri.bv_val, val->bv_len );
-	} else {
-		bc->sb_uri = *val;
-#ifdef HAVE_TLS
-		if ( ldap_is_ldaps_url( val->bv_val ))
-			bc->sb_tls_do_init = 1;
-#endif
-	}
-	return 0;
-}
-
-static slap_cf_aux_table bindkey[] = {
-	{ BER_BVC("uri="), offsetof(Backend, b_bindconf.sb_uri), 'x', 1, slap_sb_uri },
-	{ BER_BVC("bindmethod="), offsetof(Backend, b_bindconf.sb_method), 'i', 0, methkey },
-	{ BER_BVC("timeout="), offsetof(Backend, b_bindconf.sb_timeout_api), 'i', 0, NULL },
-	{ BER_BVC("network-timeout="), offsetof(Backend, b_bindconf.sb_timeout_net), 'i', 0, NULL },
-	{ BER_BVC("binddn="), offsetof(Backend, b_bindconf.sb_binddn), 'b', 1, NULL },
-	{ BER_BVC("credentials="), offsetof(Backend, b_bindconf.sb_cred), 'b', 1, NULL },
-	{ BER_BVC("saslmech="), offsetof(Backend, b_bindconf.sb_saslmech), 'b', 0, NULL },
-	{ BER_BVC("secprops="), offsetof(Backend, b_bindconf.sb_secprops), 's', 0, NULL },
-	{ BER_BVC("realm="), offsetof(Backend, b_bindconf.sb_realm), 'b', 0, NULL },
-	{ BER_BVC("authcID="), offsetof(Backend, b_bindconf.sb_authcId), 'b', 1, NULL },
-	{ BER_BVC("authzID="), offsetof(Backend, b_bindconf.sb_authzId), 'b', 1, NULL },
-	{ BER_BVC("keepalive="), offsetof(Backend, b_bindconf.sb_keepalive), 'x', 0, (slap_verbmasks *)slap_keepalive_parse },
+static slap_cf_aux_table backendkey[] = {
+	{ BER_BVC("uri="), offsetof(Backend, b_uri), 'b', 1, NULL },
 
 	{ BER_BVC("numconns="), offsetof(Backend, b_numconns), 'i', 0, NULL },
 	{ BER_BVC("bindconns="), offsetof(Backend, b_numbindconns), 'i', 0, NULL },
@@ -2199,17 +2180,32 @@ static slap_cf_aux_table bindkey[] = {
 
 	{ BER_BVC("max-pending-ops="), offsetof(Backend, b_max_pending), 'i', 0, NULL },
 	{ BER_BVC("conn-max-pending="), offsetof(Backend, b_max_conn_pending), 'i', 0, NULL },
+	{ BER_BVNULL, 0, 0, 0, NULL }
+};
+
+static slap_cf_aux_table bindkey[] = {
+	{ BER_BVC("bindmethod="), offsetof(slap_bindconf, sb_method), 'i', 0, methkey },
+	{ BER_BVC("timeout="), offsetof(slap_bindconf, sb_timeout_api), 'i', 0, NULL },
+	{ BER_BVC("network-timeout="), offsetof(slap_bindconf, sb_timeout_net), 'i', 0, NULL },
+	{ BER_BVC("binddn="), offsetof(slap_bindconf, sb_binddn), 'b', 1, NULL },
+	{ BER_BVC("credentials="), offsetof(slap_bindconf, sb_cred), 'b', 1, NULL },
+	{ BER_BVC("saslmech="), offsetof(slap_bindconf, sb_saslmech), 'b', 0, NULL },
+	{ BER_BVC("secprops="), offsetof(slap_bindconf, sb_secprops), 's', 0, NULL },
+	{ BER_BVC("realm="), offsetof(slap_bindconf, sb_realm), 'b', 0, NULL },
+	{ BER_BVC("authcID="), offsetof(slap_bindconf, sb_authcId), 'b', 1, NULL },
+	{ BER_BVC("authzID="), offsetof(slap_bindconf, sb_authzId), 'b', 1, NULL },
+	{ BER_BVC("keepalive="), offsetof(slap_bindconf, sb_keepalive), 'x', 0, (slap_verbmasks *)slap_keepalive_parse },
 #ifdef HAVE_TLS
-	{ BER_BVC("starttls="), offsetof(Backend, b_bindconf.sb_tls), 'i', 0, tlskey },
-	{ BER_BVC("tls_cert="), offsetof(Backend, b_bindconf.sb_tls_cert), 's', 1, NULL },
-	{ BER_BVC("tls_key="), offsetof(Backend, b_bindconf.sb_tls_key), 's', 1, NULL },
-	{ BER_BVC("tls_cacert="), offsetof(Backend, b_bindconf.sb_tls_cacert), 's', 1, NULL },
-	{ BER_BVC("tls_cacertdir="), offsetof(Backend, b_bindconf.sb_tls_cacertdir), 's', 1, NULL },
-	{ BER_BVC("tls_reqcert="), offsetof(Backend, b_bindconf.sb_tls_reqcert), 's', 0, NULL },
-	{ BER_BVC("tls_cipher_suite="), offsetof(Backend, b_bindconf.sb_tls_cipher_suite), 's', 0, NULL },
-	{ BER_BVC("tls_protocol_min="), offsetof(Backend, b_bindconf.sb_tls_protocol_min), 's', 0, NULL },
+	{ BER_BVC("starttls="), offsetof(slap_bindconf, sb_tls), 'i', 0, tlskey },
+	{ BER_BVC("tls_cert="), offsetof(slap_bindconf, sb_tls_cert), 's', 1, NULL },
+	{ BER_BVC("tls_key="), offsetof(slap_bindconf, sb_tls_key), 's', 1, NULL },
+	{ BER_BVC("tls_cacert="), offsetof(slap_bindconf, sb_tls_cacert), 's', 1, NULL },
+	{ BER_BVC("tls_cacertdir="), offsetof(slap_bindconf, sb_tls_cacertdir), 's', 1, NULL },
+	{ BER_BVC("tls_reqcert="), offsetof(slap_bindconf, sb_tls_reqcert), 's', 0, NULL },
+	{ BER_BVC("tls_cipher_suite="), offsetof(slap_bindconf, sb_tls_cipher_suite), 's', 0, NULL },
+	{ BER_BVC("tls_protocol_min="), offsetof(slap_bindconf, sb_tls_protocol_min), 's', 0, NULL },
 #ifdef HAVE_OPENSSL_CRL
-	{ BER_BVC("tls_crlcheck="), offsetof(Backend, b_bindconf.sb_tls_crlcheck), 's', 0, NULL },
+	{ BER_BVC("tls_crlcheck="), offsetof(slap_bindconf, sb_tls_crlcheck), 's', 0, NULL },
 #endif
 #endif
 	{ BER_BVNULL, 0, 0, 0, NULL }
@@ -2473,15 +2469,21 @@ slap_tls_get_config( LDAP *ld, int opt, char **val )
 }
 
 int
-bindconf_parse( const char *word, Backend *b )
+backend_parse( const char *word, Backend *b )
 {
-	return slap_cf_aux_table_parse( word, b, bindkey, "bind config" );
+	return slap_cf_aux_table_parse( word, b, backendkey, "backend config" );
 }
 
 int
-bindconf_unparse( Backend *b, struct berval *bv )
+bindconf_parse( const char *word, slap_bindconf *bc )
 {
-	return slap_cf_aux_table_unparse( b, bv, bindkey );
+	return slap_cf_aux_table_parse( word, bc, bindkey, "bind config" );
+}
+
+int
+bindconf_unparse( slap_bindconf *bc, struct berval *bv )
+{
+	return slap_cf_aux_table_unparse( bc, bv, bindkey );
 }
 
 void bindconf_free( slap_bindconf *bc ) {
