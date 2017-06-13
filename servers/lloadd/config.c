@@ -136,7 +136,7 @@ enum {
 	CFG_THREADS,
 	CFG_LOGFILE,
 	CFG_MIRRORMODE,
-	CFG_LTHREADS,
+	CFG_IOTHREADS,
 	CFG_THREADQS,
 	CFG_TLS_ECNAME,
 	CFG_RESCOUNT,
@@ -171,11 +171,11 @@ static ConfigTable config_back_cf_table[] = {
 		&global_idletimeout },
 	{ "include", "file", 2, 2, 0, ARG_MAGIC,
 		&config_include },
-	{ "listener-threads", "count", 2, 0, 0,
+	{ "io-threads", "count", 2, 0, 0,
 #ifdef NO_THREADS
 		ARG_IGNORED, NULL,
 #else
-		ARG_UINT|ARG_MAGIC|CFG_LTHREADS, &config_generic,
+		ARG_UINT|ARG_MAGIC|CFG_IOTHREADS, &config_generic,
 #endif
     },
 	{ "logfile", "file", 2, 2, 0, ARG_STRING|ARG_MAGIC|CFG_LOGFILE,
@@ -349,7 +349,7 @@ config_generic(ConfigArgs *c) {
 			connection_pool_queues = c->value_int;	/* save for reference */
 			break;
 
-		case CFG_LTHREADS:
+		case CFG_IOTHREADS:
 			{ int mask = 0;
 			/* use a power of two */
 			while (c->value_uint > 1) {
