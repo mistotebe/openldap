@@ -643,6 +643,9 @@ request_process( Connection *client, Operation *op )
         Debug( LDAP_DEBUG_STATS, "request_process: "
                 "connid=%lu, msgid=%d no available connection found\n",
                 op->o_client_connid, op->o_client_msgid, 0 );
+
+        operation_send_reject( op, LDAP_UNAVAILABLE,
+                "no connections available", 1 );
         goto fail;
     }
     op->o_upstream = upstream;
@@ -715,8 +718,8 @@ fail:
         ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
         CONNECTION_LOCK_DECREF(upstream);
         UPSTREAM_UNLOCK_OR_DESTROY(upstream);
+        operation_send_reject( op, LDAP_OTHER, "internal error", 0 );
     }
-    operation_send_reject( op, LDAP_OTHER, "internal error", 0 );
     CONNECTION_LOCK_DECREF(client);
     op->o_client_refcnt--;
     operation_destroy_from_client( op );
