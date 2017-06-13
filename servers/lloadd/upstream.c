@@ -715,6 +715,7 @@ upstream_write_cb( evutil_socket_t s, short what, void *arg )
             "have something to write to upstream %lu\n",
             c->c_connid, 0, 0 );
 
+    event_del( c->c_write_event );
     /* We might have been beaten to flushing the data by another thread */
     if ( c->c_pendingber && ber_flush( c->c_sb, c->c_pendingber, 1 ) ) {
         int err = sock_errno();
@@ -893,15 +894,22 @@ upstream_destroy( Connection *c )
 {
     Backend *b = c->c_private;
     struct event *read_event, *write_event;
+    TAvlnode *root;
+    long freed;
 
     Debug( LDAP_DEBUG_CONNS, "upstream_destroy: freeing connection %lu\n",
             c->c_connid, 0, 0 );
 
     c->c_state = SLAP_C_INVALID;
 
+    root = c->c_ops;
+    c->c_ops = NULL;
+
     read_event = c->c_read_event;
     write_event = c->c_write_event;
     CONNECTION_UNLOCK_INCREF(c);
+
+    freed = tavl_free( root, (AVL_FREE)operation_lost_upstream );
 
     /*
      * Avoid a deadlock:
