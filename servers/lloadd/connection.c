@@ -113,11 +113,6 @@ connection_init(
     c->c_sb = ber_sockbuf_alloc( );
     ber_sockbuf_ctrl( c->c_sb, LBER_SB_OPT_SET_FD, &s );
 
-    {
-        ber_len_t max = sockbuf_max_incoming;
-        ber_sockbuf_ctrl( c->c_sb, LBER_SB_OPT_SET_MAX_INCOMING, &max );
-    }
-
 #ifdef LDAP_PF_LOCAL
     if ( flags & CONN_IS_IPC ) {
 #ifdef LDAP_DEBUG

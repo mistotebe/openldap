@@ -299,8 +299,8 @@ LDAP_SLAPD_F (int) slap_zn_wlock LDAP_P((void*, void*));
 LDAP_SLAPD_F (int) slap_zn_wunlock LDAP_P((void*, void*));
 #endif
 
-LDAP_SLAPD_V (ber_len_t) sockbuf_max_incoming;
-LDAP_SLAPD_V (ber_len_t) sockbuf_max_incoming_auth;
+LDAP_SLAPD_V (ber_len_t) sockbuf_max_incoming_client;
+LDAP_SLAPD_V (ber_len_t) sockbuf_max_incoming_upstream;
 LDAP_SLAPD_V (int)		slap_conn_max_pending;
 LDAP_SLAPD_V (int)		slap_conn_max_pending_auth;
 LDAP_SLAPD_V (int)      slap_conn_max_pdus_per_cycle;

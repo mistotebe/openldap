@@ -72,8 +72,8 @@ static char	*logfileName;
 
 slap_features_t slap_features;
 
-ber_len_t sockbuf_max_incoming = SLAP_SB_MAX_INCOMING_DEFAULT;
-ber_len_t sockbuf_max_incoming_auth= SLAP_SB_MAX_INCOMING_AUTH;
+ber_len_t sockbuf_max_incoming_client = SLAP_SB_MAX_INCOMING_CLIENT;
+ber_len_t sockbuf_max_incoming_upstream = SLAP_SB_MAX_INCOMING_UPSTREAM;
 
 int	slap_conn_max_pending = SLAP_CONN_MAX_PENDING_DEFAULT;
 int	slap_conn_max_pending_auth = SLAP_CONN_MAX_PENDING_AUTH;
@@ -186,10 +186,10 @@ static ConfigTable config_back_cf_table[] = {
 		&slapd_pid_file },
 	{ "restrict", "op_list", 2, 0, 0, ARG_MAGIC,
 		&config_restrict },
-	{ "sockbuf_max_incoming", "max", 2, 2, 0, ARG_BER_LEN_T,
-		&sockbuf_max_incoming },
-	{ "sockbuf_max_incoming_auth", "max", 2, 2, 0, ARG_BER_LEN_T,
-		&sockbuf_max_incoming_auth },
+	{ "sockbuf_max_incoming_client", "max", 2, 2, 0, ARG_BER_LEN_T,
+		&sockbuf_max_incoming_client },
+	{ "sockbuf_max_incoming_upstream", "max", 2, 2, 0, ARG_BER_LEN_T,
+		&sockbuf_max_incoming_upstream },
 	{ "tcp-buffer", "[listener=<listener>] [{read|write}=]size", 0, 0, 0,
 #ifndef LDAP_TCP_BUFFER
 		ARG_IGNORED, NULL,
