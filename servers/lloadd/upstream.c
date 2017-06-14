@@ -271,26 +271,14 @@ done:
 static int
 handle_unsolicited( Connection *c, BerElement *ber )
 {
-    TAvlnode *root;
-    long freed, executing;
-
     CONNECTION_LOCK(c);
+    c->c_state = SLAP_C_CLOSING;
 
     Debug( LDAP_DEBUG_CONNS, "handle_unsolicited: "
             "teardown for upstream connection %lu\n",
             c->c_connid, 0, 0 );
 
-    root = c->c_ops;
-    c->c_ops = NULL;
-    executing = c->c_n_ops_executing;
-    CONNECTION_UNLOCK_INCREF(c);
-
-    freed = tavl_free( root, (AVL_FREE)operation_lost_upstream );
-    assert( freed == executing );
-    Debug( LDAP_DEBUG_TRACE, "handle_unsolicited: "
-            "dropped %ld operations\n", freed, 0, 0 );
-
-    UPSTREAM_LOCK_DESTROY(c);
+    UPSTREAM_DESTROY(c);
     ber_free( ber, 1 );
 
     return -1;
@@ -901,7 +889,7 @@ upstream_destroy( Connection *c )
     Backend *b = c->c_private;
     struct event *read_event, *write_event;
     TAvlnode *root;
-    long freed;
+    long freed, executing;
 
     Debug( LDAP_DEBUG_CONNS, "upstream_destroy: freeing connection %lu\n",
             c->c_connid, 0, 0 );
@@ -910,12 +898,14 @@ upstream_destroy( Connection *c )
 
     root = c->c_ops;
     c->c_ops = NULL;
+    executing = c->c_n_ops_executing;
 
     read_event = c->c_read_event;
     write_event = c->c_write_event;
     CONNECTION_UNLOCK_INCREF(c);
 
     freed = tavl_free( root, (AVL_FREE)operation_lost_upstream );
+    assert( freed == executing );
 
     /*
      * Avoid a deadlock:
@@ -938,7 +928,7 @@ upstream_destroy( Connection *c )
         LDAP_CIRCLEQ_REMOVE( &b->b_conns, c, c_next );
         b->b_active--;
     }
-    b->b_n_ops_executing -= c->c_n_ops_executing;
+    b->b_n_ops_executing -= executing;
     ldap_pvt_thread_mutex_unlock( &b->b_mutex );
     backend_retry( b );
 
