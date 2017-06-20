@@ -192,8 +192,9 @@ operation_destroy_from_client( Operation *op )
          */
         if ( !detach_client && race_state == SLAP_OP_FREEING_UPSTREAM ) {
             Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_client: "
-                    "op=%p lost race, increasing client refcnt c=%p\n",
-                    op, client, 0 );
+                    "op=%p lost race, increased client refcnt connid=%lu "
+                    "to refcnt=%d\n",
+                    op, client->c_connid, client->c_refcnt );
             CONNECTION_LOCK(client);
         } else {
             Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_client: "
@@ -221,7 +222,8 @@ operation_destroy_from_client( Operation *op )
          */
         upstream->c_refcnt--;
         Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_client: "
-                "op=%p other side lost race with us\n", op, 0, 0 );
+                "op=%p other side lost race with us, upstream connid=%lu\n",
+                op, upstream->c_connid, 0 );
     }
     ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
@@ -334,8 +336,9 @@ operation_destroy_from_upstream( Operation *op )
          */
         if ( !detach_upstream && race_state == SLAP_OP_FREEING_CLIENT ) {
             Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_upstream: "
-                    "op=%p lost race, increasing upstream refcnt c=%p\n",
-                    op, upstream, 0 );
+                    "op=%p lost race, increased upstream refcnt connid=%lu "
+                    "to refcnt=%d\n",
+                    op, upstream->c_connid, upstream->c_refcnt );
             CONNECTION_LOCK(upstream);
         } else {
             Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_upstream: "
@@ -362,7 +365,8 @@ operation_destroy_from_upstream( Operation *op )
          */
         client->c_refcnt--;
         Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_upstream: "
-                "op=%p other side lost race with us\n", op, 0, 0 );
+                "op=%p other side lost race with us, client connid=%lu\n",
+                op, client->c_connid, 0 );
     }
 
     /* 6. liveness/refcnt adjustment and test */
@@ -431,7 +435,8 @@ operation_init( Connection *c, BerElement *ber )
     rc = tavl_insert( &c->c_ops, op, operation_client_cmp, avl_dup_error );
     if ( rc ) {
         Debug( LDAP_DEBUG_PACKETS, "operation_init: "
-                "several operations with same msgid=%d in-flight from client %lu\n",
+                "several operations with same msgid=%d in-flight "
+                "from client connid=%lu\n",
                 op->o_client_msgid, op->o_client_connid, 0 );
         goto fail;
     }
@@ -558,8 +563,16 @@ request_abandon( Connection *c, Operation *op )
 
     request = tavl_find( c->c_ops, &needle, operation_client_cmp );
     if ( !request ) {
+        Debug( LDAP_DEBUG_TRACE, "request_abandon: "
+                "connid=%lu msgid=%d requests abandon of an operation "
+                "msgid=%d not being processed anymore\n",
+                c->c_connid, op->o_client_msgid, needle.o_client_msgid );
         goto done;
     }
+    Debug( LDAP_DEBUG_TRACE, "request_abandon: "
+            "connid=%lu abandoning %s msgid=%d\n",
+            c->c_connid, slap_msgtype2str(request->o_tag),
+            needle.o_client_msgid );
 
     CONNECTION_UNLOCK_INCREF( c );
     operation_abandon( request );
@@ -578,7 +591,7 @@ operation_send_reject( Operation *op, int result, const char *msg, int send_anyw
     int found;
 
     Debug( LDAP_DEBUG_TRACE, "operation_send_reject: "
-            "rejecting %s from client %lu with message: \"%s\"\n",
+            "rejecting %s from client connid=%lu with message: \"%s\"\n",
             slap_msgtype2str(op->o_tag), op->o_client_connid, msg );
 
     ldap_pvt_thread_mutex_lock( &operation_mutex );
@@ -589,6 +602,9 @@ operation_send_reject( Operation *op, int result, const char *msg, int send_anyw
          * client is dead, it must have been the upstream */
         assert( c );
         CONNECTION_LOCK(c);
+        Debug( LDAP_DEBUG_TRACE, "operation_send_reject: "
+                "not sending msgid=%d, client connid=%lu is dead\n",
+                op->o_client_msgid, op->o_client_connid, 0 );
         ldap_pvt_thread_mutex_unlock( &operation_mutex );
         operation_destroy_from_upstream( op );
         UPSTREAM_UNLOCK_OR_DESTROY(c);
@@ -599,6 +615,10 @@ operation_send_reject( Operation *op, int result, const char *msg, int send_anyw
 
     found = (tavl_delete( &c->c_ops, op, operation_client_cmp ) == op);
     if ( !found && !send_anyway ) {
+        Debug( LDAP_DEBUG_TRACE, "operation_send_reject: "
+                "msgid=%d not scheduled for client connid=%lu anymore, "
+                "not sending\n",
+                op->o_client_msgid, c->c_connid, 0 );
         goto done;
     }
 

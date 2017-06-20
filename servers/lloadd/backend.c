@@ -136,7 +136,8 @@ backend_select( Operation *op )
                     && ( b->b_max_conn_pending == 0
                         || c->c_n_ops_executing < b->b_max_conn_pending ) ) {
                 Debug( LDAP_DEBUG_CONNS, "backend_select: "
-                        "selected connection %lu for client %lu msgid=%d\n",
+                        "selected connection connid=%lu for client "
+                        "connid=%lu msgid=%d\n",
                         c->c_connid, op->o_client_connid, op->o_client_msgid );
 
                 /*
@@ -174,7 +175,8 @@ backend_retry( Backend *b )
     int rc, requested;
 
     if ( slapd_shutdown ) {
-        Debug( LDAP_DEBUG_CONNS, "backend_retry: shutting down\n", 0, 0, 0 );
+        Debug( LDAP_DEBUG_CONNS, "backend_retry: "
+                "shutting down\n", 0, 0, 0 );
         return;
     }
 
@@ -203,7 +205,8 @@ backend_retry( Backend *b )
             }
         } else {
             Debug( LDAP_DEBUG_CONNS, "backend_retry: "
-                    "scheduling re-connection straight away\n", 0, 0, 0 );
+                    "scheduling re-connection straight away\n",
+                    0, 0, 0 );
             b->b_opening++;
             rc = ldap_pvt_thread_pool_submit( &connection_pool, backend_connect_task, b );
             if ( rc ) {
@@ -229,7 +232,8 @@ backend_connect( evutil_socket_t s, short what, void *arg )
 
     if ( slapd_shutdown ) {
         Debug( LDAP_DEBUG_CONNS, "backend_connect: "
-                "doing nothing, shutdown in progress\n", 0, 0, 0 );
+                "doing nothing, shutdown in progress\n",
+                0, 0, 0 );
         return;
     }
 

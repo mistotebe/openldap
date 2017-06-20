@@ -42,12 +42,15 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
     CONNECTION_LOCK(c);
     if ( !c->c_live ) {
         event_del( c->c_read_event );
+        Debug( LDAP_DEBUG_CONNS, "client_read_cb: "
+                "suspended read event on a dead connid=%lu\n",
+                c->c_connid, 0, 0 );
         CONNECTION_UNLOCK(c);
         return;
     }
 
     Debug( LDAP_DEBUG_CONNS, "client_read_cb: "
-            "connection %lu ready to read\n",
+            "connection connid=%lu ready to read\n",
             c->c_connid, 0, 0 );
 
     ber = c->c_currentber;
@@ -75,9 +78,15 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
             ber_free( ber, 1 );
 
             event_del( c->c_read_event );
+            Debug( LDAP_DEBUG_CONNS, "client_read_cb: "
+                    "suspended read event on dying connid=%lu\n",
+                    c->c_connid, 0, 0 );
             CLIENT_DESTROY(c);
             return;
         }
+        Debug( LDAP_DEBUG_CONNS, "client_read_cb: "
+                "re-enabled read event on connid=%lu\n",
+                c->c_connid, 0, 0 );
         CONNECTION_UNLOCK(c);
         return;
     }
@@ -94,7 +103,11 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
         }
         return;
     }
+
     event_del( c->c_read_event );
+    Debug( LDAP_DEBUG_CONNS, "client_read_cb: "
+            "suspended read event on connid=%lu\n",
+            c->c_connid, 0, 0 );
 
     CONNECTION_UNLOCK(c);
     return;
@@ -151,6 +164,9 @@ handle_requests( void *ctx, void *arg )
     }
 
     event_add( c->c_read_event, NULL );
+    Debug( LDAP_DEBUG_CONNS, "handle_requests: "
+            "re-enabled read event on connid=%lu\n",
+            c->c_connid, 0, 0 );
     CLIENT_UNLOCK_OR_DESTROY(c);
     return NULL;
 }
@@ -234,7 +250,7 @@ client_write_cb( evutil_socket_t s, short what, void *arg )
 
     ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
     Debug( LDAP_DEBUG_CONNS, "client_write_cb: "
-            "have something to write to client %lu\n",
+            "have something to write to client connid=%lu\n",
             c->c_connid, 0, 0 );
 
     event_del( c->c_write_event );
