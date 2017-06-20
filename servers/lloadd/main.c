@@ -392,7 +392,7 @@ int main( int argc, char **argv )
 	int slapd_pid_file_unlink = 0, slapd_args_file_unlink = 0;
 	int firstopt = 1;
 
-    struct event_base *daemon_base;
+    struct event_base *daemon_base = NULL;
 
 	slap_sl_mem_init();
 
