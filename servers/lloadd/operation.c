@@ -242,7 +242,7 @@ operation_destroy_from_client( Operation *op )
         ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
         assert( upstream != NULL );
-        CONNECTION_UNLOCK(upstream);
+        UPSTREAM_UNLOCK_OR_DESTROY(upstream);
         CONNECTION_LOCK_DECREF(client);
         return;
     }
@@ -383,7 +383,7 @@ operation_destroy_from_upstream( Operation *op )
         ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
         assert( client != NULL );
-        CONNECTION_UNLOCK(client);
+        CLIENT_UNLOCK_OR_DESTROY(client);
         CONNECTION_LOCK_DECREF(upstream);
         return;
     }
@@ -738,11 +738,13 @@ fail:
     if ( upstream ) {
         ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
         CONNECTION_LOCK_DECREF(upstream);
+        upstream->c_n_ops_executing--;
         UPSTREAM_UNLOCK_OR_DESTROY(upstream);
         operation_send_reject( op, LDAP_OTHER, "internal error", 0 );
     }
     CONNECTION_LOCK_DECREF(client);
     op->o_client_refcnt--;
     operation_destroy_from_client( op );
-    return rc;
+    CLIENT_UNLOCK_OR_DESTROY(client);
+    return -1;
 }
