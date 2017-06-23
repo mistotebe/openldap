@@ -270,6 +270,7 @@ client_reset( Connection *c )
         } while ( (node = tavl_next( node, TAVL_DIR_RIGHT )) );
     }
 
+    c->c_type = SLAP_C_OPEN;
     if ( !BER_BVISNULL( &c->c_auth ) ) {
         ch_free( c->c_auth.bv_val );
         BER_BVZERO( &c->c_auth );
@@ -312,6 +313,9 @@ client_bind( Connection *client, Operation *op )
     client->c_type = SLAP_C_OPEN;
 
     client_reset( client );
+
+    rc = tavl_insert( &client->c_ops, op, operation_client_cmp, avl_dup_error );
+    assert( rc == LDAP_SUCCESS );
     CONNECTION_UNLOCK_INCREF(client);
 
     upstream = backend_select( op );
@@ -352,9 +356,18 @@ client_bind( Connection *client, Operation *op )
 
     if ( !--op->o_client_refcnt ) {
         operation_destroy_from_client( op );
-    } else {
-        rc = tavl_insert( &client->c_ops, op, operation_client_cmp, avl_dup_error );
-        assert( rc == LDAP_SUCCESS );
+        if ( client->c_state == SLAP_C_BINDING ) {
+            client->c_state = SLAP_C_READY;
+            client->c_type = SLAP_C_OPEN;
+            if ( !BER_BVISNULL( &client->c_auth ) ) {
+                ber_memfree( client->c_auth.bv_val );
+                BER_BVZERO( &client->c_auth );
+            }
+            if ( !BER_BVISNULL( &client->c_sasl_bind_mech ) ) {
+                ber_memfree( client->c_sasl_bind_mech.bv_val );
+                BER_BVZERO( &client->c_sasl_bind_mech );
+            }
+        }
     }
 
     return rc;
