@@ -84,6 +84,7 @@ client_read_cb( evutil_socket_t s, short what, void *arg )
             CLIENT_DESTROY(c);
             return;
         }
+        event_add( c->c_read_event, NULL );
         Debug( LDAP_DEBUG_CONNS, "client_read_cb: "
                 "re-enabled read event on connid=%lu\n",
                 c->c_connid, 0, 0 );
@@ -248,12 +249,14 @@ client_write_cb( evutil_socket_t s, short what, void *arg )
     }
     CONNECTION_UNLOCK_INCREF(c);
 
+    /* Before we acquire any locks */
+    event_del( c->c_write_event );
+
     ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
     Debug( LDAP_DEBUG_CONNS, "client_write_cb: "
             "have something to write to client connid=%lu\n",
             c->c_connid, 0, 0 );
 
-    event_del( c->c_write_event );
     /* We might have been beaten to flushing the data by another thread */
     if ( c->c_pendingber && ber_flush( c->c_sb, c->c_pendingber, 1 ) ) {
         int err = sock_errno();

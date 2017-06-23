@@ -578,10 +578,13 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
         return;
     }
 
+    event_del( c->c_read_event );
+    Debug( LDAP_DEBUG_CONNS, "upstream_read_cb: suspended read event on connid=%lu\n",
+            c->c_connid, 0, 0 );
+
     /* We have scheduled a call to handle_responses which takes care of
      * handling further requests, just make sure the connection sticks around
      * for that */
-    event_del( c->c_read_event );
     CONNECTION_UNLOCK_INCREF(c);
     return;
 }
@@ -726,12 +729,14 @@ upstream_write_cb( evutil_socket_t s, short what, void *arg )
     }
     CONNECTION_UNLOCK_INCREF(c);
 
+    /* Before we acquire any locks */
+    event_del( c->c_write_event );
+
     ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
     Debug( LDAP_DEBUG_CONNS, "upstream_write_cb: "
             "have something to write to upstream connid=%lu\n",
             c->c_connid, 0, 0 );
 
-    event_del( c->c_write_event );
     /* We might have been beaten to flushing the data by another thread */
     if ( c->c_pendingber && ber_flush( c->c_sb, c->c_pendingber, 1 ) ) {
         int err = sock_errno();
