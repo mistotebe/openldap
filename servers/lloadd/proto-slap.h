@@ -307,6 +307,8 @@ LDAP_SLAPD_V (int)		slap_conn_max_pending;
 LDAP_SLAPD_V (int)		slap_conn_max_pending_auth;
 LDAP_SLAPD_V (int)      slap_conn_max_pdus_per_cycle;
 
+LDAP_SLAPD_V (int)      slap_write_timeout;
+
 LDAP_SLAPD_V (slap_features_t) slap_features;
 
 LDAP_SLAPD_V (slap_mask_t)	global_allows;
