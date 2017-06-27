@@ -149,8 +149,7 @@ LDAP_SLAPD_F (int) slapd_daemon_init( const char *urls );
 LDAP_SLAPD_F (int) slapd_daemon_destroy(void);
 LDAP_SLAPD_F (int) slapd_daemon( struct event_base *daemon_base );
 LDAP_SLAPD_F (Listener **)	slapd_get_listeners LDAP_P((void));
-LDAP_SLAPD_F (void) slapd_remove LDAP_P((ber_socket_t s, Sockbuf *sb,
-	int wasactive, int wake, int locked ));
+LDAP_SLAPD_F (void) listeners_reactivate LDAP_P((void));
 LDAP_SLAPD_F (struct event_base *) slap_get_base LDAP_P(( ber_socket_t s ));
 
 LDAP_SLAPD_F (void) slap_sig_shutdown LDAP_P(( evutil_socket_t sig, short what, void *arg ));
