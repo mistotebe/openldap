@@ -214,7 +214,7 @@ operation_destroy_from_client( Operation *op )
     ldap_pvt_thread_mutex_unlock( &operation_mutex );
 
     ldap_pvt_thread_mutex_lock( &op->o_mutex );
-    if ( upstream && op->o_freeing & SLAP_OP_FREEING_UPSTREAM ) {
+    if ( upstream && ( op->o_freeing & SLAP_OP_FREEING_UPSTREAM ) ) {
         /*
          * We have raced to destroy op and won. To avoid freeing the connection
          * under us, a refcnt token has been left over for us on the upstream,
@@ -357,7 +357,7 @@ operation_destroy_from_upstream( Operation *op )
     }
     ldap_pvt_thread_mutex_unlock( &operation_mutex );
 
-    if ( client && op->o_freeing & SLAP_OP_FREEING_CLIENT ) {
+    if ( client && ( op->o_freeing & SLAP_OP_FREEING_CLIENT ) ) {
         /*
          * We have raced to destroy op and won. To avoid freeing the connection
          * under us, a refcnt token has been left over for us on the client,
