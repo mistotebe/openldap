@@ -357,6 +357,7 @@ operation_destroy_from_upstream( Operation *op )
     }
     ldap_pvt_thread_mutex_unlock( &operation_mutex );
 
+    ldap_pvt_thread_mutex_lock( &op->o_mutex );
     if ( client && ( op->o_freeing & SLAP_OP_FREEING_CLIENT ) ) {
         /*
          * We have raced to destroy op and won. To avoid freeing the connection
@@ -368,6 +369,7 @@ operation_destroy_from_upstream( Operation *op )
                 "op=%p other side lost race with us, client connid=%lu\n",
                 op, client->c_connid, 0 );
     }
+    ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
     /* 6. liveness/refcnt adjustment and test */
     op->o_client_refcnt -= op->o_client_live;
