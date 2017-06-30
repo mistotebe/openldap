@@ -219,7 +219,7 @@ static ConfigTable config_back_cf_table[] = {
 		ARG_INT|ARG_MAGIC|CFG_THREADQS, &config_generic,
 #endif
     },
-	{ "max_responses_per_cycle", "count", 2, 2, 0,
+	{ "max_pdus_per_cycle", "count", 2, 2, 0,
 		ARG_INT|ARG_MAGIC|CFG_RESCOUNT, &config_generic, },
     { "feature", "name", 2, 0, 0,
         ARG_MAGIC, &config_feature, },
