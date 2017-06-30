@@ -493,9 +493,16 @@ handle_responses( void *ctx, void *arg )
             int err = sock_errno();
 
             if ( err != EWOULDBLOCK && err != EAGAIN ) {
-                Debug( LDAP_DEBUG_ANY, "handle_responses: "
-                        "ber_get_next on fd %d failed errno=%d (%s)\n",
-                        c->c_fd, err, sock_errstr(err) );
+                if ( err || tag == LBER_ERROR ) {
+                    Debug( LDAP_DEBUG_ANY, "handle_responses: "
+                            "ber_get_next on fd=%d failed errno=%d (%s)\n",
+                            c->c_fd, err, sock_errstr(err) );
+                } else {
+                    Debug( LDAP_DEBUG_STATS, "handle_responses: "
+                            "ber_get_next on fd=%d connid=%lu received "
+                            "a strange PDU tag=%lx\n",
+                            c->c_fd, c->c_connid, tag );
+                }
 
                 c->c_currentber = NULL;
                 ber_free( ber, 1 );
@@ -557,10 +564,15 @@ upstream_read_cb( evutil_socket_t s, short what, void *arg )
         int err = sock_errno();
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
-            if ( err ) {
+            if ( err || tag == LBER_ERROR ) {
                 Debug( LDAP_DEBUG_ANY, "upstream_read_cb: "
-                        "ber_get_next on fd %d failed errno=%d (%s)\n",
+                        "ber_get_next on fd=%d failed errno=%d (%s)\n",
                         c->c_fd, err, sock_errstr(err) );
+            } else {
+                Debug( LDAP_DEBUG_STATS, "upstream_read_cb: "
+                        "ber_get_next on fd=%d connid=%lu received "
+                        "a strange PDU tag=%lx\n",
+                        c->c_fd, c->c_connid, tag );
             }
 
             c->c_currentber = NULL;
@@ -667,9 +679,16 @@ upstream_bind_cb( evutil_socket_t s, short what, void *arg )
         int err = sock_errno();
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
-            Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
-                    "ber_get_next on fd %d failed errno=%d (%s)\n",
-                    c->c_fd, err, sock_errstr(err) );
+            if ( err || tag == LBER_ERROR ) {
+                Debug( LDAP_DEBUG_ANY, "upstream_bind_cb: "
+                        "ber_get_next on fd=%d failed errno=%d (%s)\n",
+                        c->c_fd, err, sock_errstr(err) );
+            } else {
+                Debug( LDAP_DEBUG_STATS, "upstream_bind_cb: "
+                        "ber_get_next on fd=%d connid=%lu received "
+                        "a strange PDU tag=%lx\n",
+                        c->c_fd, c->c_connid, tag );
+            }
 
             c->c_currentber = NULL;
             goto fail;
@@ -759,7 +778,7 @@ upstream_write_cb( evutil_socket_t s, short what, void *arg )
 
         if ( err != EWOULDBLOCK && err != EAGAIN ) {
             Debug( LDAP_DEBUG_ANY, "upstream_write_cb: "
-                    "ber_flush on fd %d failed errno=%d (%s)\n",
+                    "ber_flush on fd=%d failed errno=%d (%s)\n",
                     c->c_fd, err, sock_errstr(err) );
             ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
             UPSTREAM_LOCK_DESTROY(c);

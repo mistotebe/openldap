@@ -165,7 +165,7 @@ slapd_clr_writetime( time_t old )
 static void
 slapd_close( ber_socket_t s )
 {
-	Debug( LDAP_DEBUG_CONNS, "daemon: closing %ld\n",
+	Debug( LDAP_DEBUG_CONNS, "daemon: closing fd=%ld\n",
 		(long) s, 0, 0 );
 	tcp_close( s );
 }
@@ -920,7 +920,7 @@ slap_listener(
 #endif /* SO_KEEPALIVE || TCP_NODELAY */
 
     Debug( LDAP_DEBUG_CONNS,
-            "daemon: listen=%ld, new connection on %ld\n",
+            "daemon: listen=%ld, new connection on fd=%ld\n",
             (long) sl->sl_sd, (long) s, 0 );
 
     cflag = 0;

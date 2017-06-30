@@ -53,6 +53,8 @@ request_bind( Operation *op )
 
     tag = ber_get_int( copy, &version );
     if ( tag == LBER_ERROR ) {
+        Debug( LDAP_DEBUG_PACKETS, "request_bind: "
+                "failed to parse version field\n", 0, 0, 0 );
         goto fail;
     } else if ( version != LDAP_VERSION3 ) {
         ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
@@ -64,6 +66,8 @@ request_bind( Operation *op )
 
     tag = ber_get_stringbv( copy, &binddn, LBER_BV_NOTERM );
     if ( tag == LBER_ERROR ) {
+        Debug( LDAP_DEBUG_PACKETS, "request_bind: "
+                "failed to parse bind name field\n", 0, 0, 0 );
         goto fail;
     }
 
