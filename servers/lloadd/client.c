@@ -364,9 +364,36 @@ fail:
 void
 client_destroy( Connection *c )
 {
+    struct event *read_event, *write_event;
+
     Debug( LDAP_DEBUG_CONNS, "client_destroy: "
             "destroying client connid=%lu\n",
             c->c_connid, 0, 0 );
+
+    read_event = c->c_read_event;
+    write_event = c->c_write_event;
+
+    /*
+     * FIXME: operation_destroy_from_upstream might copy op->o_client and bump
+     * c_refcnt, it is then responsible to call destroy_client again, does that
+     * mean that we can be triggered for recursion over all connections?
+     */
+    CONNECTION_UNLOCK_INCREF(c);
+
+    /*
+     * Avoid a deadlock:
+     * event_del will block if the event is currently executing its callback,
+     * that callback might be waiting to lock c->c_mutex
+     */
+    if ( read_event ) {
+        event_del( read_event );
+    }
+
+    if ( write_event ) {
+        event_del( write_event );
+    }
+
+    CONNECTION_LOCK_DECREF(c);
 
     if ( c->c_read_event ) {
         event_free( c->c_read_event );
@@ -379,10 +406,6 @@ client_destroy( Connection *c )
     }
 
     c->c_state = SLAP_C_INVALID;
-    /* FIXME: we drop c_mutex in client_reset, operation_destroy_from_upstream
-     * might copy op->o_client and bump c_refcnt, it is then responsible to
-     * call destroy_client again, does that mean that we can be triggered for
-     * recursion over all connections? */
     client_reset( c );
 
     /*
