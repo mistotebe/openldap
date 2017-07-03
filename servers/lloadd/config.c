@@ -414,6 +414,8 @@ config_backend(ConfigArgs *c) {
     b->b_numconns = 1;
     b->b_numbindconns = 1;
 
+    b->b_retry_timeout = 5000;
+
     for ( i=1; i < c->argc; i++ ) {
         if ( backend_parse( c->argv[i], b ) ) {
             Debug( LDAP_DEBUG_ANY, "config_backend: error parsing backend configuration item '%s'\n", c->argv[i], 0, 0 );
