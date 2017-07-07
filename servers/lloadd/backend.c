@@ -148,6 +148,7 @@ upstream_name_cb( int result, struct evutil_addrinfo *res, void *arg )
                 b->b_uri.bv_val, 0, 0 );
 
         ldap_pvt_thread_mutex_unlock( &b->b_mutex );
+        free( res );
         return;
     }
 
