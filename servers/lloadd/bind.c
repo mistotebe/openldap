@@ -281,7 +281,6 @@ client_reset( Connection *c )
         } while ( (node = tavl_next( node, TAVL_DIR_RIGHT )) );
     }
 
-    c->c_type = SLAP_C_OPEN;
     if ( !BER_BVISNULL( &c->c_auth ) ) {
         ch_free( c->c_auth.bv_val );
         BER_BVZERO( &c->c_auth );
