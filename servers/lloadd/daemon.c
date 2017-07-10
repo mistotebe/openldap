@@ -786,6 +786,9 @@ slapd_daemon_destroy( void )
 
 		for ( i=0; i<slapd_daemon_threads; i++ ) {
 			ldap_pvt_thread_mutex_destroy( &slap_daemon[i].sd_mutex );
+            if ( slap_daemon[i].wakeup_event ) {
+                event_free( slap_daemon[i].wakeup_event );
+            }
             if ( slap_daemon[i].base ) {
                 event_base_free( slap_daemon[i].base );
             }
