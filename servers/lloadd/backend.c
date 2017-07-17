@@ -199,6 +199,7 @@ backend_select( Operation *op )
             Debug( LDAP_DEBUG_CONNS, "backend_select: backend %s too busy\n",
                     b->b_uri.bv_val, 0, 0 );
             ldap_pvt_thread_mutex_unlock( &b->b_mutex );
+            b = next;
             continue;
         }
 
