@@ -26,6 +26,7 @@ if test $WAIT != 0 ; then
     echo PID $PID
     read foo
 fi
+PID2="$PID"
 KILLPIDS="$PID"
 
 echo "Testing slapd searching..."
@@ -69,6 +70,7 @@ if test $WAIT != 0 ; then
     echo PID $PID
     read foo
 fi
+PID3="$PID"
 KILLPIDS="$KILLPIDS $PID"
 
 sleep $SLEEP0
