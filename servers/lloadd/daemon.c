@@ -93,8 +93,6 @@ static int emfile;
 
 static time_t chk_writetime;
 
-ldap_pvt_thread_mutex_t operation_mutex;
-
 static volatile int waking;
 #ifdef NO_THREADS
 #define WAKE_DAEMON(l,w) do { \
@@ -724,8 +722,6 @@ slapd_daemon_init( const char *urls )
 
 	Debug( LDAP_DEBUG_ARGS, "daemon_init: %s\n",
 		urls ? urls : "<null>", 0, 0 );
-
-    ldap_pvt_thread_mutex_init( &operation_mutex );
 
 #ifdef HAVE_TCPD
 	ldap_pvt_thread_mutex_init( &sd_tcpd_mutex );
