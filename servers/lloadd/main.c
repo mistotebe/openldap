@@ -396,8 +396,6 @@ int main( int argc, char **argv )
 
 	slap_sl_mem_init();
 
-	(void) balancer_libevent_init();
-
 	serverName = lutil_progname( "lloadd", argc, argv );
 
 #ifdef HAVE_NT_SERVICE_MANAGER
@@ -649,6 +647,10 @@ unhandled_option:;
 #endif /* LDAP_DEBUG && LDAP_SYSLOG */
 
 	Debug( LDAP_DEBUG_ANY, "%s", Versionstr, 0, 0 );
+
+	if ( balancer_libevent_init() ) {
+		goto stop;
+	}
 
 	global_host = ldap_pvt_get_fqdn( NULL );
 
