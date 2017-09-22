@@ -70,21 +70,11 @@ handle_one_request( Connection *c )
             break;
         default:
             if ( c->c_state == SLAP_C_BINDING ) {
-                op->o_client_refcnt++;
-                CONNECTION_UNLOCK_INCREF(c);
-                operation_send_reject( op, LDAP_PROTOCOL_ERROR, "bind in progress", 0 );
-                CONNECTION_LOCK_DECREF(c);
-                op->o_client_refcnt--;
-                operation_destroy_from_client( op );
-                return LDAP_SUCCESS;
+                return operation_send_reject_locked( op, LDAP_PROTOCOL_ERROR,
+                        "bind in progress", 0 );
             } else if ( op->o_tag != LDAP_REQ_SEARCH ) {
-                op->o_client_refcnt++;
-                CONNECTION_UNLOCK_INCREF(c);
-                operation_send_reject( op, LDAP_UNWILLING_TO_PERFORM, "operation not supported", 0 );
-                CONNECTION_LOCK_DECREF(c);
-                op->o_client_refcnt--;
-                operation_destroy_from_client( op );
-                return LDAP_SUCCESS;
+                return operation_send_reject_locked( op, LDAP_UNWILLING_TO_PERFORM,
+                        "operation not supported", 0 );
             }
             handler = request_process;
             break;

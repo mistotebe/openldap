@@ -224,6 +224,7 @@ LDAP_SLAPD_F (int) operation_client_cmp LDAP_P(( const void *l, const void *r ))
 LDAP_SLAPD_F (Operation *) operation_init LDAP_P(( Connection *c, BerElement *ber ));
 LDAP_SLAPD_F (void) operation_abandon LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_send_reject LDAP_P(( Operation *op, int result, const char *msg, int send_anyway ));
+LDAP_SLAPD_F (int) operation_send_reject_locked LDAP_P(( Operation *op, int result, const char *msg, int send_anyway ));
 LDAP_SLAPD_F (void) operation_lost_upstream LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_destroy_from_client LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_destroy_from_upstream LDAP_P((Operation *op));
