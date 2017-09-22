@@ -263,7 +263,7 @@ operation_destroy_from_client( Operation *op )
         ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
         assert( upstream != NULL );
-        UPSTREAM_UNLOCK_OR_DESTROY(upstream);
+        CONNECTION_UNLOCK_OR_DESTROY(upstream);
         CONNECTION_LOCK_DECREF(client);
         return;
     }
@@ -274,7 +274,7 @@ operation_destroy_from_client( Operation *op )
             upstream->c_n_ops_executing--;
             b = (Backend *)upstream->c_private;
         }
-        UPSTREAM_UNLOCK_OR_DESTROY(upstream);
+        CONNECTION_UNLOCK_OR_DESTROY(upstream);
 
         if ( b ) {
             ldap_pvt_thread_mutex_lock( &b->b_mutex );
@@ -428,7 +428,7 @@ operation_destroy_from_upstream( Operation *op )
         ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
         assert( client != NULL );
-        CLIENT_UNLOCK_OR_DESTROY(client);
+        CONNECTION_UNLOCK_OR_DESTROY(client);
         CONNECTION_LOCK_DECREF(upstream);
         return;
     }
@@ -436,7 +436,7 @@ operation_destroy_from_upstream( Operation *op )
     /* 7. Remove from the operation map and TODO adjust the pending op count */
     if ( client ) {
         tavl_delete( &client->c_ops, op, operation_client_cmp );
-        CLIENT_UNLOCK_OR_DESTROY(client);
+        CONNECTION_UNLOCK_OR_DESTROY(client);
     }
 
     /* 8. Release the operation */
@@ -579,7 +579,7 @@ operation_abandon( Operation *op )
     ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
 
     if ( rc != -1 ) {
-        upstream_write_cb( -1, 0, c );
+        connection_write_cb( -1, 0, c );
     }
 
     CONNECTION_LOCK_DECREF(c);
@@ -593,7 +593,7 @@ unlock:
     if ( !c->c_live ) {
         operation_destroy_from_upstream( op );
     }
-    UPSTREAM_UNLOCK_OR_DESTROY(c);
+    CONNECTION_UNLOCK_OR_DESTROY(c);
 
 done:
     c = op->o_client;
@@ -625,7 +625,7 @@ request_abandon( Connection *c, Operation *op )
         CONNECTION_UNLOCK_INCREF(c);
         operation_send_reject( op, LDAP_PROTOCOL_ERROR, "invalid PDU received", 0 );
         CONNECTION_LOCK_DECREF(c);
-        CLIENT_DESTROY(c);
+        CONNECTION_DESTROY(c);
         return -1;
     }
 
@@ -682,7 +682,7 @@ operation_send_reject( Operation *op, int result, const char *msg, int send_anyw
                 "not sending msgid=%d, client connid=%lu is dead\n",
                 op->o_client_msgid, op->o_client_connid, 0 );
         operation_destroy_from_upstream( op );
-        UPSTREAM_UNLOCK_OR_DESTROY(c);
+        CONNECTION_UNLOCK_OR_DESTROY(c);
         return;
     }
     CONNECTION_LOCK(c);
@@ -708,7 +708,7 @@ operation_send_reject( Operation *op, int result, const char *msg, int send_anyw
                 c->c_connid, 0, 0 );
         CONNECTION_LOCK_DECREF(c);
         operation_destroy_from_client( op );
-        CLIENT_DESTROY(c);
+        CONNECTION_DESTROY(c);
         return;
     }
     c->c_pendingber = ber;
@@ -719,12 +719,12 @@ operation_send_reject( Operation *op, int result, const char *msg, int send_anyw
 
     ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
 
-    client_write_cb( -1, 0, c );
+    connection_write_cb( -1, 0, c );
 
     CONNECTION_LOCK_DECREF(c);
 done:
     operation_destroy_from_client( op );
-    CLIENT_UNLOCK_OR_DESTROY(c);
+    CONNECTION_UNLOCK_OR_DESTROY(c);
 }
 
 /*
@@ -819,10 +819,10 @@ request_process( Connection *client, Operation *op )
     }
     ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
 
-    upstream_write_cb( -1, 0, upstream );
+    connection_write_cb( -1, 0, upstream );
 
     CONNECTION_LOCK_DECREF(upstream);
-    UPSTREAM_UNLOCK_OR_DESTROY(upstream);
+    CONNECTION_UNLOCK_OR_DESTROY(upstream);
 
     CONNECTION_LOCK_DECREF(client);
     if ( !--op->o_client_refcnt ) {
@@ -838,7 +838,7 @@ fail:
         CONNECTION_LOCK_DECREF(upstream);
         upstream->c_n_ops_executing--;
         b = (Backend *)upstream->c_private;
-        UPSTREAM_UNLOCK_OR_DESTROY(upstream);
+        CONNECTION_UNLOCK_OR_DESTROY(upstream);
 
         ldap_pvt_thread_mutex_lock( &b->b_mutex );
         b->b_n_ops_executing--;
@@ -850,7 +850,7 @@ fail:
     op->o_client_refcnt--;
     operation_destroy_from_client( op );
     if ( rc ) {
-        CLIENT_DESTROY(client);
+        CONNECTION_DESTROY(client);
     }
     return rc;
 }

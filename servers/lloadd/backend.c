@@ -456,7 +456,7 @@ backends_destroy( void )
                     c->c_connid, c->c_n_ops_executing, 0 );
 
             assert( c->c_live );
-            UPSTREAM_DESTROY(c);
+            CONNECTION_DESTROY(c);
         }
         while ( !LDAP_CIRCLEQ_EMPTY( &b->b_conns ) ) {
             Connection *c = LDAP_CIRCLEQ_FIRST( &b->b_conns );
@@ -467,7 +467,7 @@ backends_destroy( void )
                     c->c_connid, c->c_n_ops_executing, 0 );
 
             assert( c->c_live );
-            UPSTREAM_DESTROY(c);
+            CONNECTION_DESTROY(c);
         }
 
         LDAP_CIRCLEQ_REMOVE( &backend, b, b_next );

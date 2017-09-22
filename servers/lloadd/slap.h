@@ -318,6 +318,10 @@ struct Backend {
 };
 
 typedef int (*OperationHandler) ( Operation *op, BerElement *ber );
+typedef int (*RequestHandler) ( Connection *c, Operation *op );
+
+typedef int (*CONNECTION_PDU_CB) LDAP_P(( Connection *c ));
+typedef void (*CONNECTION_DESTROY_CB) LDAP_P(( Connection *c ));
 
 /* connection state (protected by c_mutex) */
 enum sc_state {
@@ -359,6 +363,8 @@ struct Connection {
  */
     ldap_pvt_thread_mutex_t	c_mutex; /* protect the connection */
     int                     c_refcnt, c_live;
+    CONNECTION_DESTROY_CB   c_destroy;
+    CONNECTION_PDU_CB       c_pdu_cb;
 #define CONNECTION_LOCK(c) ldap_pvt_thread_mutex_lock( &(c)->c_mutex )
 #define CONNECTION_UNLOCK(c) ldap_pvt_thread_mutex_unlock( &(c)->c_mutex )
 #define CONNECTION_LOCK_DECREF(c) do { \
@@ -369,34 +375,24 @@ struct Connection {
         (c)->c_refcnt++; \
         CONNECTION_UNLOCK(c); \
     } while (0)
-#define CONNECTION_UNLOCK_OR_DESTROY(type, c) do { \
+#define CONNECTION_UNLOCK_OR_DESTROY(c) do { \
         assert( (c)->c_refcnt >= 0 ); \
         if ( !(c)->c_refcnt ) { \
-            Debug( LDAP_DEBUG_TRACE, "%s: destroying " #type " connection connid=%lu\n", __func__, (c)->c_connid, 0 ); \
-            type ## _destroy((c)); \
+            Debug( LDAP_DEBUG_TRACE, "%s: destroying connection connid=%lu\n", __func__, (c)->c_connid, 0 ); \
+            c->c_destroy((c)); \
             (c) = NULL; \
         } else { \
             CONNECTION_UNLOCK(c); \
         } \
     } while (0)
-#define CONNECTION_DESTROY(type, c) do { \
+#define CONNECTION_DESTROY(c) do { \
         (c)->c_refcnt -= (c)->c_live; \
         (c)->c_live = 0; \
-        CONNECTION_UNLOCK_OR_DESTROY( type, c ); \
+        CONNECTION_UNLOCK_OR_DESTROY( c ); \
     } while (0)
-
-#define UPSTREAM_UNLOCK_OR_DESTROY(c) CONNECTION_UNLOCK_OR_DESTROY( upstream, c );
-#define UPSTREAM_DESTROY(c) CONNECTION_DESTROY( upstream, c )
-#define UPSTREAM_LOCK_DESTROY(c) do { \
+#define CONNECTION_LOCK_DESTROY(c) do { \
         CONNECTION_LOCK_DECREF(c); \
-        UPSTREAM_DESTROY(c); \
-    } while (0);
-
-#define CLIENT_UNLOCK_OR_DESTROY(c) CONNECTION_UNLOCK_OR_DESTROY( client, c );
-#define CLIENT_DESTROY(c) CONNECTION_DESTROY( client, c )
-#define CLIENT_LOCK_DESTROY(c) do { \
-        CONNECTION_LOCK_DECREF(c); \
-        CLIENT_DESTROY(c); \
+        CONNECTION_DESTROY(c); \
     } while (0);
 
     Sockbuf		            *c_sb;			/* ber connection stuff		  */
