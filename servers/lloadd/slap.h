@@ -259,7 +259,9 @@ typedef enum {
 enum {
     LLOAD_CLEARTEXT = 0,
     LLOAD_LDAPS,
+    LLOAD_STARTTLS_OPTIONAL,
     LLOAD_STARTTLS,
+    LLOAD_TLS_ESTABLISHED,
 };
 
 typedef enum {
