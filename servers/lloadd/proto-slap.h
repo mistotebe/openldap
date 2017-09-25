@@ -86,6 +86,7 @@ LDAP_SLAPD_F (int) handle_vc_bind_response LDAP_P(( Operation *op, BerElement *b
 LDAP_SLAPD_F (int) request_abandon LDAP_P(( Connection *c, Operation *op ));
 LDAP_SLAPD_F (int) request_process LDAP_P(( Connection *c, Operation *op ));
 LDAP_SLAPD_F (int) handle_one_request LDAP_P(( Connection *c ));
+LDAP_SLAPD_F (void) client_tls_handshake_cb LDAP_P(( evutil_socket_t s, short what, void *arg ));
 LDAP_SLAPD_F (Connection *) client_init LDAP_P((
 	ber_socket_t s,
 	Listener* url,
