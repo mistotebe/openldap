@@ -308,7 +308,7 @@ struct Backend {
 
     int b_numconns, b_numbindconns;
     int b_bindavail, b_active, b_opening;
-    LDAP_CIRCLEQ_HEAD(ConnSt, Connection) b_conns, b_bindconns;
+    LDAP_CIRCLEQ_HEAD(ConnSt, Connection) b_conns, b_bindconns, b_preparing;
     LDAP_LIST_HEAD(ConnectingSt, PendingConnection) b_connecting;
 
     long b_max_pending, b_max_conn_pending;
@@ -333,6 +333,7 @@ enum sc_state {
 };
 enum sc_type {
 	SLAP_C_OPEN = 0,    /* regular connection */
+	SLAP_C_PREPARING,   /* upstream connection not assigned yet */
 	SLAP_C_BIND,	    /* connection used to handle bind client requests if VC not enabled */
 	SLAP_C_PRIVILEGED,  /* connection can override proxyauthz control */
 };
