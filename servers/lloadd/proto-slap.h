@@ -177,6 +177,14 @@ LDAP_SLAPD_V (int) slapd_tcp_wmem;
 #define bvmatch(bv1, bv2)	( ((bv1)->bv_len == (bv2)->bv_len) && (memcmp((bv1)->bv_val, (bv2)->bv_val, (bv1)->bv_len) == 0) )
 
 /*
+ * extended.c
+ */
+LDAP_SLAPD_V( Avlnode * ) lload_exop_handlers;
+LDAP_SLAPD_F (int) exop_handler_cmp LDAP_P(( const void *l, const void *r ));
+LDAP_SLAPD_F (int) request_extended LDAP_P(( Connection *c, Operation *op ));
+LDAP_SLAPD_F (int) lload_exop_init LDAP_P(( void ));
+
+/*
  * globals.c
  */
 LDAP_SLAPD_V( const struct berval ) slap_empty_bv;

@@ -319,6 +319,10 @@ struct Backend {
 
 typedef int (*OperationHandler) ( Operation *op, BerElement *ber );
 typedef int (*RequestHandler) ( Connection *c, Operation *op );
+typedef struct lload_exop_handlers_t {
+    struct berval oid;
+    RequestHandler func;
+} ExopHandler;
 
 typedef int (*CONNECTION_PDU_CB) LDAP_P(( Connection *c ));
 typedef void (*CONNECTION_DESTROY_CB) LDAP_P(( Connection *c ));
