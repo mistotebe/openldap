@@ -72,9 +72,6 @@ handle_one_request( Connection *c )
             if ( c->c_state == SLAP_C_BINDING ) {
                 return operation_send_reject_locked( op, LDAP_PROTOCOL_ERROR,
                         "bind in progress", 0 );
-            } else if ( op->o_tag != LDAP_REQ_SEARCH ) {
-                return operation_send_reject_locked( op, LDAP_UNWILLING_TO_PERFORM,
-                        "operation not supported", 0 );
             }
             handler = request_process;
             break;
