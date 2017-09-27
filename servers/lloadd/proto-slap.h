@@ -77,6 +77,8 @@ LDAP_SLAPD_F (void) ch_free LDAP_P(( void * ));
  * bind.c
  */
 LDAP_SLAPD_F (int) request_bind LDAP_P(( Connection *c, Operation *op ));
+LDAP_SLAPD_F (int) handle_bind_response LDAP_P(( Operation *op, BerElement *ber ));
+LDAP_SLAPD_F (int) handle_vc_bind_response LDAP_P(( Operation *op, BerElement *ber ));
 
 /*
  * client.c
@@ -270,6 +272,8 @@ LDAP_SLAPD_F (int) value_add_one LDAP_P((
 /*
  * upstream.c
  */
+LDAP_SLAPD_F (int) forward_final_response LDAP_P(( Operation *op, BerElement *ber ));
+LDAP_SLAPD_F (int) forward_response LDAP_P(( Operation *op, BerElement *ber ));
 LDAP_SLAPD_F (Connection *) upstream_init LDAP_P((
 	ber_socket_t s,
 	Backend* b ));
