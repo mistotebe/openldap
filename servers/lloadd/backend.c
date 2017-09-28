@@ -199,7 +199,7 @@ backend_select( Operation *op )
 
         if ( op->o_tag == LDAP_REQ_BIND
 #ifdef LDAP_API_FEATURE_VERIFY_CREDENTIALS
-                && !( slap_features & SLAP_FEATURE_VC )
+                && !( slap_features & LLOAD_FEATURE_VC )
 #endif /* LDAP_API_FEATURE_VERIFY_CREDENTIALS */
                 ) {
             head = &b->b_bindconns;
@@ -210,7 +210,7 @@ backend_select( Operation *op )
         LDAP_CIRCLEQ_FOREACH( c, head, c_next ) {
             ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
             CONNECTION_LOCK(c);
-            if ( c->c_state == SLAP_C_READY && !c->c_pendingber
+            if ( c->c_state == LLOAD_C_READY && !c->c_pendingber
                     && ( b->b_max_conn_pending == 0
                         || c->c_n_ops_executing < b->b_max_conn_pending ) ) {
                 Debug( LDAP_DEBUG_CONNS, "backend_select: "
@@ -262,7 +262,7 @@ backend_retry( Backend *b )
 
     requested = b->b_numconns;
 #ifdef LDAP_API_FEATURE_VERIFY_CREDENTIALS
-    if ( !(slap_features & SLAP_FEATURE_VC) )
+    if ( !(slap_features & LLOAD_FEATURE_VC) )
 #endif /* LDAP_API_FEATURE_VERIFY_CREDENTIALS */
     {
         requested += b->b_numbindconns;

@@ -648,7 +648,7 @@ unhandled_option:;
 
 	Debug( LDAP_DEBUG_ANY, "%s", Versionstr, 0, 0 );
 
-	if ( balancer_libevent_init() ) {
+	if ( lload_libevent_init() ) {
 		goto stop;
 	}
 

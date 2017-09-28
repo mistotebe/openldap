@@ -104,7 +104,7 @@ request_bind( Operation *op )
     if ( tavl_insert( &upstream->c_ops, op, operation_upstream_cmp, avl_dup_error ) ) {
         assert( 0 );
     }
-    upstream->c_state = SLAP_C_ACTIVE;
+    upstream->c_state = LLOAD_C_ACTIVE;
     CONNECTION_UNLOCK(upstream);
 
     ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
@@ -310,8 +310,8 @@ client_bind( Connection *client, Operation *op )
 
     client_reset( client );
 
-    client->c_state = SLAP_C_BINDING;
-    client->c_type = SLAP_C_OPEN;
+    client->c_state = LLOAD_C_BINDING;
+    client->c_type = LLOAD_C_OPEN;
 
     rc = tavl_insert( &client->c_ops, op, operation_client_cmp, avl_dup_error );
     assert( rc == LDAP_SUCCESS );
@@ -334,7 +334,7 @@ client_bind( Connection *client, Operation *op )
     op->o_upstream_connid = upstream->c_connid;
 
 #ifdef LDAP_API_FEATURE_VERIFY_CREDENTIALS
-    if ( slap_features & SLAP_FEATURE_VC ) {
+    if ( slap_features & LLOAD_FEATURE_VC ) {
         rc = request_bind_as_vc( op );
     } else
 #endif /* LDAP_API_FEATURE_VERIFY_CREDENTIALS */
@@ -355,9 +355,9 @@ client_bind( Connection *client, Operation *op )
 
     if ( !--op->o_client_refcnt ) {
         operation_destroy_from_client( op );
-        if ( client->c_state == SLAP_C_BINDING ) {
-            client->c_state = SLAP_C_READY;
-            client->c_type = SLAP_C_OPEN;
+        if ( client->c_state == LLOAD_C_BINDING ) {
+            client->c_state = LLOAD_C_READY;
+            client->c_type = LLOAD_C_OPEN;
             if ( !BER_BVISNULL( &client->c_auth ) ) {
                 ber_memfree( client->c_auth.bv_val );
                 BER_BVZERO( &client->c_auth );

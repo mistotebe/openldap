@@ -25,7 +25,7 @@
 #include "ldap_pvt_thread.h"
 
 static void *
-balancer_libevent_mutex_init( unsigned locktype ) {
+lload_libevent_mutex_init( unsigned locktype ) {
     int rc;
     ldap_pvt_thread_mutex_t *mutex = ch_malloc( sizeof(ldap_pvt_thread_mutex_t) );
 
@@ -42,7 +42,7 @@ balancer_libevent_mutex_init( unsigned locktype ) {
 }
 
 static void
-balancer_libevent_mutex_destroy( void *lock, unsigned locktype ) {
+lload_libevent_mutex_destroy( void *lock, unsigned locktype ) {
     int rc;
     ldap_pvt_thread_mutex_t *mutex = lock;
 
@@ -56,7 +56,7 @@ balancer_libevent_mutex_destroy( void *lock, unsigned locktype ) {
 }
 
 static int
-balancer_libevent_mutex_lock( unsigned mode, void *lock ) {
+lload_libevent_mutex_lock( unsigned mode, void *lock ) {
     int rc;
     ldap_pvt_thread_mutex_t *mutex = lock;
 
@@ -68,7 +68,7 @@ balancer_libevent_mutex_lock( unsigned mode, void *lock ) {
 }
 
 static int
-balancer_libevent_mutex_unlock( unsigned mode, void *lock ) {
+lload_libevent_mutex_unlock( unsigned mode, void *lock ) {
     int rc;
     ldap_pvt_thread_mutex_t *mutex = lock;
 
@@ -76,7 +76,7 @@ balancer_libevent_mutex_unlock( unsigned mode, void *lock ) {
 }
 
 static void *
-balancer_libevent_cond_init( unsigned condtype ) {
+lload_libevent_cond_init( unsigned condtype ) {
     int rc;
     ldap_pvt_thread_cond_t *cond = ch_malloc( sizeof(ldap_pvt_thread_cond_t) );
 
@@ -90,7 +90,7 @@ balancer_libevent_cond_init( unsigned condtype ) {
 }
 
 static void
-balancer_libevent_cond_destroy( void *c ) {
+lload_libevent_cond_destroy( void *c ) {
     int rc;
     ldap_pvt_thread_cond_t *cond = c;
 
@@ -100,7 +100,7 @@ balancer_libevent_cond_destroy( void *c ) {
 }
 
 static int
-balancer_libevent_cond_signal( void *c, int broadcast ) {
+lload_libevent_cond_signal( void *c, int broadcast ) {
     int rc;
     ldap_pvt_thread_cond_t *cond = c;
 
@@ -112,7 +112,7 @@ balancer_libevent_cond_signal( void *c, int broadcast ) {
 }
 
 static int
-balancer_libevent_cond_timedwait(
+lload_libevent_cond_timedwait(
         void *c,
         void *lock,
         const struct timeval *timeout )
@@ -131,27 +131,27 @@ balancer_libevent_cond_timedwait(
 }
 
 int
-balancer_libevent_init(void)
+lload_libevent_init(void)
 {
     struct evthread_lock_callbacks cbs = {
         EVTHREAD_LOCK_API_VERSION,
         EVTHREAD_LOCKTYPE_RECURSIVE,
-        balancer_libevent_mutex_init,
-        balancer_libevent_mutex_destroy,
-        balancer_libevent_mutex_lock,
-        balancer_libevent_mutex_unlock
+        lload_libevent_mutex_init,
+        lload_libevent_mutex_destroy,
+        lload_libevent_mutex_lock,
+        lload_libevent_mutex_unlock
     };
     struct evthread_condition_callbacks cond_cbs = {
         EVTHREAD_CONDITION_API_VERSION,
-        balancer_libevent_cond_init,
-        balancer_libevent_cond_destroy,
-        balancer_libevent_cond_signal,
-        balancer_libevent_cond_timedwait
+        lload_libevent_cond_init,
+        lload_libevent_cond_destroy,
+        lload_libevent_cond_signal,
+        lload_libevent_cond_timedwait
     };
     int rc;
 
 #ifndef LDAP_THREAD_HAVE_NATIVE_RECURSIVE_MUTEX
-/* balancer_libevent_mutex_(un)lock can't distinguish between locking
+/* lload_libevent_mutex_(un)lock can't distinguish between locking
  * a recursive vs. regular mutex */
 #error Cannot support libevent on this platform
 #endif /* LDAP_THREAD_HAVE_NATIVE_RECURSIVE_MUTEX */
@@ -168,7 +168,7 @@ balancer_libevent_init(void)
 }
 
 void
-balancer_libevent_destroy(void)
+lload_libevent_destroy(void)
 {
     libevent_global_shutdown();
 }

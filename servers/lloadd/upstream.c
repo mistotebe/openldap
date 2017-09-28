@@ -120,24 +120,24 @@ handle_bind_response( Operation *op, BerElement *ber )
 
     CONNECTION_LOCK(upstream);
     if ( result != LDAP_SASL_BIND_IN_PROGRESS ) {
-        upstream->c_state = SLAP_C_READY;
+        upstream->c_state = LLOAD_C_READY;
     }
     CONNECTION_UNLOCK(upstream);
 
     CONNECTION_LOCK(client);
-    if ( client->c_state == SLAP_C_BINDING ) {
+    if ( client->c_state == LLOAD_C_BINDING ) {
         switch ( result ) {
             case LDAP_SASL_BIND_IN_PROGRESS:
                 break;
             case LDAP_SUCCESS:
             default: {
-                client->c_state = SLAP_C_READY;
-                client->c_type = SLAP_C_OPEN;
+                client->c_state = LLOAD_C_READY;
+                client->c_type = LLOAD_C_OPEN;
                 if ( result != LDAP_SUCCESS ) {
                     ber_memfree( client->c_auth.bv_val );
                     BER_BVZERO( &client->c_auth );
                 } else if ( !ber_bvstrcasecmp( &client->c_auth, &lloadd_identity ) ) {
-                    client->c_type = SLAP_C_PRIVILEGED;
+                    client->c_type = LLOAD_C_PRIVILEGED;
                 }
                 if ( !BER_BVISNULL( &client->c_sasl_bind_mech ) ) {
                     ber_memfree( client->c_sasl_bind_mech.bv_val );
@@ -147,8 +147,8 @@ handle_bind_response( Operation *op, BerElement *ber )
             }
         }
     } else {
-        assert( client->c_state == SLAP_C_INVALID ||
-                client->c_state == SLAP_C_CLOSING );
+        assert( client->c_state == LLOAD_C_INVALID ||
+                client->c_state == LLOAD_C_CLOSING );
     }
     CONNECTION_UNLOCK(client);
 
@@ -233,19 +233,19 @@ handle_vc_bind_response( Operation *op, BerElement *ber )
         }
     }
 
-    if ( c->c_state == SLAP_C_BINDING ) {
+    if ( c->c_state == LLOAD_C_BINDING ) {
         switch ( result ) {
             case LDAP_SASL_BIND_IN_PROGRESS:
                 break;
             case LDAP_SUCCESS:
             default: {
-                c->c_state = SLAP_C_READY;
-                c->c_type = SLAP_C_OPEN;
+                c->c_state = LLOAD_C_READY;
+                c->c_type = LLOAD_C_OPEN;
                 if ( result != LDAP_SUCCESS ) {
                     ber_memfree( c->c_auth.bv_val );
                     BER_BVZERO( &c->c_auth );
                 } else if ( !ber_bvstrcasecmp( &c->c_auth, &lloadd_identity ) ) {
-                    c->c_type = SLAP_C_PRIVILEGED;
+                    c->c_type = LLOAD_C_PRIVILEGED;
                 }
                 if ( !BER_BVISNULL( &c->c_vc_cookie ) ) {
                     ber_memfree( c->c_vc_cookie.bv_val );
@@ -259,8 +259,8 @@ handle_vc_bind_response( Operation *op, BerElement *ber )
             }
         }
     } else {
-        assert( c->c_state == SLAP_C_INVALID ||
-                c->c_state == SLAP_C_CLOSING );
+        assert( c->c_state == LLOAD_C_INVALID ||
+                c->c_state == LLOAD_C_CLOSING );
     }
     CONNECTION_UNLOCK_INCREF(c);
 
@@ -298,7 +298,7 @@ static int
 handle_unsolicited( Connection *c, BerElement *ber )
 {
     CONNECTION_LOCK(c);
-    c->c_state = SLAP_C_CLOSING;
+    c->c_state = LLOAD_C_CLOSING;
 
     Debug( LDAP_DEBUG_CONNS, "handle_unsolicited: "
             "teardown for upstream connection connid=%lu\n",
@@ -443,8 +443,8 @@ handle_one_response( Connection *c )
         CONNECTION_LOCK_DECREF(c);
         op->o_upstream_refcnt--;
         if ( !client || !op->o_upstream_refcnt ) {
-            if ( c->c_state == SLAP_C_BINDING ) {
-                c->c_state = SLAP_C_READY;
+            if ( c->c_state == LLOAD_C_BINDING ) {
+                c->c_state = LLOAD_C_READY;
             }
             operation_destroy_from_upstream( op );
         }
@@ -500,7 +500,7 @@ upstream_bind_cb( Connection *c )
     switch ( result ) {
         case LDAP_SUCCESS: {
             c->c_pdu_cb = handle_one_response;
-            c->c_state = SLAP_C_READY;
+            c->c_state = LLOAD_C_READY;
             CONNECTION_UNLOCK_INCREF(c);
             ldap_pvt_thread_mutex_lock( &b->b_mutex );
             LDAP_CIRCLEQ_REMOVE( &b->b_preparing, c, c_next );
@@ -599,7 +599,7 @@ upstream_finish( Connection *c )
      * connection pool, finally the bind pool */
     if (
 #ifdef LDAP_API_FEATURE_VERIFY_CREDENTIALS
-            !( slap_features & SLAP_FEATURE_VC ) &&
+            !( slap_features & LLOAD_FEATURE_VC ) &&
 #endif /* LDAP_API_FEATURE_VERIFY_CREDENTIALS */
             b->b_active && b->b_numbindconns ) {
         if ( !b->b_bindavail ) {
@@ -613,15 +613,15 @@ upstream_finish( Connection *c )
     if ( is_bindconn ) {
         LDAP_CIRCLEQ_REMOVE( &b->b_preparing, c, c_next );
         LDAP_CIRCLEQ_INSERT_HEAD( &b->b_bindconns, c, c_next );
-        c->c_state = SLAP_C_READY;
-        c->c_type = SLAP_C_BIND;
+        c->c_state = LLOAD_C_READY;
+        c->c_type = LLOAD_C_BIND;
         b->b_bindavail++;
         b->b_opening--;
         b->b_failed = 0;
     } else if ( bindconf.sb_method == LDAP_AUTH_NONE ) {
         LDAP_CIRCLEQ_REMOVE( &b->b_preparing, c, c_next );
         LDAP_CIRCLEQ_INSERT_HEAD( &b->b_conns, c, c_next );
-        c->c_state = SLAP_C_READY;
+        c->c_state = LLOAD_C_READY;
         b->b_active++;
         b->b_opening--;
         b->b_failed = 0;
@@ -650,7 +650,7 @@ upstream_init( ber_socket_t s, Backend *b )
 
     assert( b != NULL );
 
-    flags = (b->b_tls == BALANCER_LDAPS) ? CONN_IS_TLS : 0;
+    flags = (b->b_tls == LLOAD_LDAPS) ? CONN_IS_TLS : 0;
     if ( ( c = connection_init( s, b->b_host, flags ) ) == NULL ) {
         return NULL;
     }
@@ -713,7 +713,7 @@ fail:
         event_free( c->c_read_event );
     }
 
-    c->c_state = SLAP_C_INVALID;
+    c->c_state = LLOAD_C_INVALID;
     CONNECTION_DESTROY(c);
     assert( c == NULL );
 
@@ -733,9 +733,9 @@ upstream_destroy( Connection *c )
             "freeing connection connid=%lu\n",
             c->c_connid, 0, 0 );
 
-    assert( c->c_state != SLAP_C_INVALID );
+    assert( c->c_state != LLOAD_C_INVALID );
     state = c->c_state;
-    c->c_state = SLAP_C_INVALID;
+    c->c_state = LLOAD_C_INVALID;
 
     root = c->c_ops;
     c->c_ops = NULL;
@@ -764,13 +764,13 @@ upstream_destroy( Connection *c )
     }
 
     /* Remove from the backend on first pass */
-    if ( state != SLAP_C_CLOSING ) {
+    if ( state != LLOAD_C_CLOSING ) {
         ldap_pvt_thread_mutex_lock( &b->b_mutex );
-        if ( state == SLAP_C_ACTIVE ) {
+        if ( state == LLOAD_C_ACTIVE ) {
             LDAP_CIRCLEQ_REMOVE( &b->b_preparing, c, c_next );
             b->b_opening--;
             b->b_failed++;
-        } else if ( c->c_type == SLAP_C_BIND ) {
+        } else if ( c->c_type == LLOAD_C_BIND ) {
             LDAP_CIRCLEQ_REMOVE( &b->b_bindconns, c, c_next );
             b->b_bindavail--;
         } else {
@@ -801,7 +801,7 @@ upstream_destroy( Connection *c )
      */
     assert( c->c_refcnt >= 0 );
     if ( c->c_refcnt ) {
-        c->c_state = SLAP_C_CLOSING;
+        c->c_state = LLOAD_C_CLOSING;
         Debug( LDAP_DEBUG_CONNS, "upstream_destroy: "
                 "connid=%lu aborting with refcnt=%d\n",
                 c->c_connid, c->c_refcnt, 0 );

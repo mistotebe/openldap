@@ -88,7 +88,7 @@ operation_client_cmp( const void *left, const void *right )
     int rc;
 
     /*
-    if ((rc = SLAP_PTRCMP(l->o_client, r->o_client))) return rc;
+    if ((rc = LLOAD_PTRCMP(l->o_client, r->o_client))) return rc;
     */
     assert( l->o_client_connid == r->o_client_connid );
     return (l->o_client_msgid < r->o_client_msgid) ?
@@ -102,7 +102,7 @@ operation_upstream_cmp( const void *left, const void *right )
     int rc;
 
     /*
-    if ((rc = SLAP_PTRCMP(l->o_upstream, r->o_upstream))) return rc;
+    if ((rc = LLOAD_PTRCMP(l->o_upstream, r->o_upstream))) return rc;
     */
     assert( l->o_upstream_connid == r->o_upstream_connid );
     return (l->o_upstream_msgid < r->o_upstream_msgid) ?
@@ -171,9 +171,9 @@ operation_destroy_from_client( Operation *op )
      * others */
     ldap_pvt_thread_mutex_lock( &op->o_mutex );
     race_state = op->o_freeing;
-    op->o_freeing |= SLAP_OP_FREEING_CLIENT;
+    op->o_freeing |= LLOAD_OP_FREEING_CLIENT;
     if ( detach_client ) {
-        op->o_freeing |= SLAP_OP_DETACHING_CLIENT;
+        op->o_freeing |= LLOAD_OP_DETACHING_CLIENT;
     }
     ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
@@ -198,7 +198,7 @@ operation_destroy_from_client( Operation *op )
                     "op=%p lost race but client connid=%lu is going down\n",
                     op, client->c_connid, 0 );
             CONNECTION_LOCK_DECREF(client);
-        } else if ( ( race_state & SLAP_OP_FREEING_MASK ) == SLAP_OP_FREEING_UPSTREAM ) {
+        } else if ( ( race_state & LLOAD_OP_FREEING_MASK ) == LLOAD_OP_FREEING_UPSTREAM ) {
             Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_client: "
                     "op=%p lost race, increased client refcnt connid=%lu "
                     "to refcnt=%d\n",
@@ -216,7 +216,7 @@ operation_destroy_from_client( Operation *op )
 
     /* 5. If we raced the upstream side and won, reclaim the token */
     ldap_pvt_thread_mutex_lock( &op->o_link_mutex );
-    if ( !( race_state & SLAP_OP_DETACHING_UPSTREAM ) ) {
+    if ( !( race_state & LLOAD_OP_DETACHING_UPSTREAM ) ) {
         upstream = op->o_upstream;
         if ( upstream ) {
             CONNECTION_LOCK(upstream);
@@ -227,8 +227,8 @@ operation_destroy_from_client( Operation *op )
     ldap_pvt_thread_mutex_lock( &op->o_mutex );
     /* We don't actually resolve the race in full until we grab the other's
      * c_mutex+op->o_mutex here */
-    if ( upstream && ( op->o_freeing & SLAP_OP_FREEING_UPSTREAM ) ) {
-        if ( op->o_freeing & SLAP_OP_DETACHING_UPSTREAM ) {
+    if ( upstream && ( op->o_freeing & LLOAD_OP_FREEING_UPSTREAM ) ) {
+        if ( op->o_freeing & LLOAD_OP_DETACHING_UPSTREAM ) {
             CONNECTION_UNLOCK(upstream);
             upstream = NULL;
         } else {
@@ -255,9 +255,9 @@ operation_destroy_from_client( Operation *op )
 
         /* There must have been no race if op is still alive */
         ldap_pvt_thread_mutex_lock( &op->o_mutex );
-        op->o_freeing &= ~SLAP_OP_FREEING_CLIENT;
+        op->o_freeing &= ~LLOAD_OP_FREEING_CLIENT;
         if ( detach_client ) {
-            op->o_freeing &= ~SLAP_OP_DETACHING_CLIENT;
+            op->o_freeing &= ~LLOAD_OP_DETACHING_CLIENT;
         }
         assert( op->o_freeing == 0 );
         ldap_pvt_thread_mutex_unlock( &op->o_mutex );
@@ -330,9 +330,9 @@ operation_destroy_from_upstream( Operation *op )
 
     ldap_pvt_thread_mutex_lock( &op->o_mutex );
     race_state = op->o_freeing;
-    op->o_freeing |= SLAP_OP_FREEING_UPSTREAM;
+    op->o_freeing |= LLOAD_OP_FREEING_UPSTREAM;
     if ( detach_upstream ) {
-        op->o_freeing |= SLAP_OP_DETACHING_UPSTREAM;
+        op->o_freeing |= LLOAD_OP_DETACHING_UPSTREAM;
     }
     ldap_pvt_thread_mutex_unlock( &op->o_mutex );
 
@@ -364,7 +364,7 @@ operation_destroy_from_upstream( Operation *op )
                     "op=%p lost race but upstream connid=%lu is going down\n",
                     op, upstream->c_connid, 0 );
             CONNECTION_LOCK_DECREF(upstream);
-        } else if ( ( race_state & SLAP_OP_FREEING_MASK ) == SLAP_OP_FREEING_CLIENT ) {
+        } else if ( ( race_state & LLOAD_OP_FREEING_MASK ) == LLOAD_OP_FREEING_CLIENT ) {
             Debug( LDAP_DEBUG_TRACE, "operation_destroy_from_upstream: "
                     "op=%p lost race, increased upstream refcnt connid=%lu "
                     "to refcnt=%d\n",
@@ -382,7 +382,7 @@ operation_destroy_from_upstream( Operation *op )
 
     /* 5. If we raced the client side and won, reclaim the token */
     ldap_pvt_thread_mutex_lock( &op->o_link_mutex );
-    if ( !( race_state & SLAP_OP_DETACHING_CLIENT ) ) {
+    if ( !( race_state & LLOAD_OP_DETACHING_CLIENT ) ) {
         client = op->o_client;
         if ( client ) {
             CONNECTION_LOCK(client);
@@ -393,8 +393,8 @@ operation_destroy_from_upstream( Operation *op )
     /* We don't actually resolve the race in full until we grab the other's
      * c_mutex+op->o_mutex here */
     ldap_pvt_thread_mutex_lock( &op->o_mutex );
-    if ( client && ( op->o_freeing & SLAP_OP_FREEING_CLIENT ) ) {
-        if ( op->o_freeing & SLAP_OP_DETACHING_CLIENT ) {
+    if ( client && ( op->o_freeing & LLOAD_OP_FREEING_CLIENT ) ) {
+        if ( op->o_freeing & LLOAD_OP_DETACHING_CLIENT ) {
             CONNECTION_UNLOCK(client);
             client = NULL;
         } else {
@@ -420,9 +420,9 @@ operation_destroy_from_upstream( Operation *op )
                 op, op->o_client_refcnt, 0 );
         /* There must have been no race if op is still alive */
         ldap_pvt_thread_mutex_lock( &op->o_mutex );
-        op->o_freeing &= ~SLAP_OP_FREEING_UPSTREAM;
+        op->o_freeing &= ~LLOAD_OP_FREEING_UPSTREAM;
         if ( detach_upstream ) {
-            op->o_freeing &= ~SLAP_OP_DETACHING_UPSTREAM;
+            op->o_freeing &= ~LLOAD_OP_DETACHING_UPSTREAM;
         }
         assert( op->o_freeing == 0 );
         ldap_pvt_thread_mutex_unlock( &op->o_mutex );
@@ -544,8 +544,8 @@ operation_abandon( Operation *op )
         /* The operation has already been abandoned or finished */
         goto unlock;
     }
-    if ( c->c_state == SLAP_C_BINDING ) {
-        c->c_state = SLAP_C_READY;
+    if ( c->c_state == LLOAD_C_BINDING ) {
+        c->c_state = LLOAD_C_READY;
     }
     c->c_n_ops_executing--;
     b = (Backend *)c->c_private;
@@ -601,8 +601,8 @@ done:
 
     /* Caller should hold a reference on client */
     CONNECTION_LOCK(c);
-    if ( c->c_state == SLAP_C_BINDING ) {
-        c->c_state = SLAP_C_READY;
+    if ( c->c_state == LLOAD_C_BINDING ) {
+        c->c_state = LLOAD_C_READY;
     }
     op->o_client_refcnt--;
     operation_destroy_from_client( op );
@@ -649,11 +649,11 @@ request_abandon( Connection *c, Operation *op )
             c->c_connid, slap_msgtype2str(request->o_tag),
             needle.o_client_msgid );
 
-    if ( c->c_state == SLAP_C_BINDING ) {
+    if ( c->c_state == LLOAD_C_BINDING ) {
         /* We have found the request and we are binding, it must be a bind
          * request */
         assert( request->o_tag == LDAP_REQ_BIND );
-        c->c_state = SLAP_C_READY;
+        c->c_state = LLOAD_C_READY;
     }
 
     CONNECTION_UNLOCK_INCREF( c );
@@ -815,8 +815,8 @@ request_process( Connection *client, Operation *op )
             op->o_upstream_connid );
     assert( rc == LDAP_SUCCESS );
 
-    if ( slap_features & SLAP_FEATURE_PROXYAUTHZ
-            && client->c_type != SLAP_C_PRIVILEGED ) {
+    if ( slap_features & LLOAD_FEATURE_PROXYAUTHZ
+            && client->c_type != LLOAD_C_PRIVILEGED ) {
         CONNECTION_LOCK_DECREF(client);
         Debug( LDAP_DEBUG_TRACE, "request_process: "
                 "proxying identity %s to upstream\n",

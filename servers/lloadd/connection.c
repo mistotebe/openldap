@@ -286,7 +286,7 @@ connection_destroy( Connection *c )
 
     assert( c->c_live == 0 );
     assert( c->c_refcnt == 0 );
-    assert( c->c_state == SLAP_C_INVALID );
+    assert( c->c_state == LLOAD_C_INVALID );
 
     evutil_closesocket( c->c_fd );
     ber_sockbuf_free( c->c_sb );
@@ -364,7 +364,7 @@ connection_init(
 
 #ifdef LDAP_DEBUG
     ber_sockbuf_add_io( c->c_sb, &ber_sockbuf_io_debug,
-            INT_MAX, (void*)"balancer_" );
+            INT_MAX, (void*)"lload_" );
 #endif
 
 #ifdef HAVE_TLS
@@ -395,7 +395,7 @@ connection_init(
             c->c_connid, s, peername );
 
     CONNECTION_LOCK(c);
-    c->c_state = SLAP_C_ACTIVE;
+    c->c_state = LLOAD_C_ACTIVE;
 
     return c;
 }

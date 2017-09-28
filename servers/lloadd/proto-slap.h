@@ -208,8 +208,8 @@ LDAP_SLAPD_V (char *)	slap_known_controls[];
 /*
  * libevent_support.c
  */
-LDAP_SLAPD_F (int) balancer_libevent_init LDAP_P((void));
-LDAP_SLAPD_F (void) balancer_libevent_destroy LDAP_P((void));
+LDAP_SLAPD_F (int) lload_libevent_init LDAP_P((void));
+LDAP_SLAPD_F (void) lload_libevent_destroy LDAP_P((void));
 
 /*
  * main.c

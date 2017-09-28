@@ -72,13 +72,13 @@ static char	*logfileName;
 
 slap_features_t slap_features;
 
-ber_len_t sockbuf_max_incoming_client = SLAP_SB_MAX_INCOMING_CLIENT;
-ber_len_t sockbuf_max_incoming_upstream = SLAP_SB_MAX_INCOMING_UPSTREAM;
+ber_len_t sockbuf_max_incoming_client = LLOAD_SB_MAX_INCOMING_CLIENT;
+ber_len_t sockbuf_max_incoming_upstream = LLOAD_SB_MAX_INCOMING_UPSTREAM;
 
-int	slap_conn_max_pending = SLAP_CONN_MAX_PENDING_DEFAULT;
-int	slap_conn_max_pending_auth = SLAP_CONN_MAX_PENDING_AUTH;
+int	slap_conn_max_pending = LLOAD_CONN_MAX_PENDING_DEFAULT;
+int	slap_conn_max_pending_auth = LLOAD_CONN_MAX_PENDING_AUTH;
 
-int slap_conn_max_pdus_per_cycle = SLAP_CONN_MAX_PDUS_PER_CYCLE_DEFAULT;
+int slap_conn_max_pdus_per_cycle = LLOAD_CONN_MAX_PDUS_PER_CYCLE_DEFAULT;
 
 int slap_write_timeout = 10000;
 
@@ -476,7 +476,7 @@ config_backend(ConfigArgs *c) {
 #else /* HAVE_TLS */
     tmp = ldap_pvt_url_scheme2tls( lud->lud_scheme );
     if ( tmp ) {
-        b->b_tls = BALANCER_LDAPS;
+        b->b_tls = LLOAD_LDAPS;
     }
 
     if ( !lud->lud_port ) {
@@ -1140,9 +1140,9 @@ static int
 config_feature(ConfigArgs *c) {
     slap_verbmasks features[] = {
 #ifdef LDAP_API_FEATURE_VERIFY_CREDENTIALS
-        { BER_BVC("vc"),            SLAP_FEATURE_VC },
+        { BER_BVC("vc"),            LLOAD_FEATURE_VC },
 #endif /* LDAP_API_FEATURE_VERIFY_CREDENTIALS */
-        { BER_BVC("proxyauthz"),    SLAP_FEATURE_PROXYAUTHZ },
+        { BER_BVC("proxyauthz"),    LLOAD_FEATURE_PROXYAUTHZ },
         { BER_BVNULL, 0 }
     };
     slap_mask_t mask = 0;
