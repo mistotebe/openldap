@@ -155,6 +155,8 @@ objectClass: olcSyncProvConfig
 olcOverlay: syncprov
 olcSpNoPresent: TRUE
 olcSpReloadHint: TRUE
+olcSpSessionlog: 1000
+olcSpSessionlogSource: cn=log
 
 dn: olcDatabase={2}$BACKEND,cn=config
 objectClass: olcDatabaseConfig
@@ -176,6 +178,8 @@ dn: olcOverlay=syncprov,olcDatabase={2}$BACKEND,cn=config
 objectClass: olcOverlayConfig
 objectClass: olcSyncProvConfig
 olcOverlay: syncprov
+olcSpSessionlog: 1000
+olcSpSessionlogSource: cn=log
 
 dn: olcOverlay=accesslog,olcDatabase={2}$BACKEND,cn=config
 objectClass: olcOverlayConfig

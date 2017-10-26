@@ -138,6 +138,7 @@ typedef struct sessionlog {
 typedef struct syncprov_info_t {
 	syncops		*si_ops;
 	struct berval	si_contextdn;
+	struct berval	si_log_init_dn;
 	BerVarray	si_ctxcsn;	/* ldapsync context */
 	int		*si_sids;
 	int		si_numcsns;
@@ -182,6 +183,8 @@ typedef struct fbase_cookie {
 
 static AttributeName csn_anlist[3];
 static AttributeName uuid_anlist[2];
+
+static AttributeDescription *ad_reqType, *ad_reqResult, *ad_reqDN, *ad_reqEntryUUID;
 
 /* Build a LDAPsync intermediate state control */
 static int
@@ -1622,6 +1625,134 @@ playlog_cb( Operation *op, SlapReply *rs )
 	return rs->sr_err;
 }
 
+/*
+ * Populate the sessionlog from accesslog entries. Some accesslog entries don't
+ * have enough information and at the moment we can't detect whether an
+ * extended operation is a write operation: in these cases, just return
+ * LDAP_CONSTRAINT_VIOLATION and stop populating the sessionlog which should
+ * still be useable, if shorter than we'd like.
+ *
+ * On the other hand, if we find out that the csn serverID set doesn't
+ * correspond to the contextCSN or we receive an entryCSN out of order (we
+ * expect them to arrive in decreasing order), the resulting sessionlog would
+ * likely be unsafe to use, we return LDAP_OTHER in that case.
+ */
+static int
+accesslog_cb( Operation *op, SlapReply *rs )
+{
+	slap_callback *sc = op->o_callback;
+	slap_overinst *on = sc->sc_private;
+	syncprov_info_t *si = on->on_bi.bi_private;
+	sessionlog *sl = si->si_logs;
+	Entry *e = rs->sr_entry;
+	slog_entry *se = NULL;
+	Attribute *a, *attrs;
+	struct berval uuid, csn;
+	struct {
+		struct berval name;
+		ber_tag_t tag;
+	} *type, types[] = {
+		{ BER_BVC("add"), LDAP_REQ_ADD },
+		{ BER_BVC("delete"), LDAP_REQ_DELETE },
+		{ BER_BVC("modify"), LDAP_REQ_MODIFY },
+		{ BER_BVC("modrdn"), LDAP_REQ_MODRDN },
+#if 0 /* TODO: extended operations */
+		{ BER_BVC("extended"), LDAP_REQ_EXTENDED },
+#endif
+		{ BER_BVNULL, LBER_DEFAULT },
+	};
+	int i;
+
+	if ( rs->sr_type != REP_SEARCH ) {
+		return rs->sr_err;
+	}
+	attrs = rs->sr_entry->e_attrs;
+
+	Debug( LDAP_DEBUG_SYNC, "syncprov_accesslog_cb: "
+			"trying to add accesslog entry to sessionlog dn='%s'\n",
+			e->e_nname.bv_val, 0, 0 );
+	a = attr_find( attrs, ad_reqType );
+	if ( !a || a->a_numvals == 0 ) {
+		rs->sr_err = LDAP_CONSTRAINT_VIOLATION;
+		goto done;
+	}
+
+	for ( type = types;
+			type->tag != LBER_DEFAULT && ber_bvcmp( &a->a_nvals[0], &type->name );
+			type++ ) /* find the operation type */;
+
+	if ( type->tag == LBER_DEFAULT ) {
+		rs->sr_err = LDAP_CONSTRAINT_VIOLATION;
+		goto done;
+	}
+
+	a = attr_find( attrs, ad_reqEntryUUID );
+	if ( !a || a->a_numvals == 0 ) {
+		rs->sr_err = LDAP_CONSTRAINT_VIOLATION;
+		goto done;
+	}
+	uuid = a->a_nvals[0];
+
+	a = attr_find( attrs, slap_schema.si_ad_entryCSN );
+	if ( !a || a->a_numvals == 0 ) {
+		rs->sr_err = LDAP_CONSTRAINT_VIOLATION;
+		goto done;
+	}
+	csn = a->a_nvals[0];
+
+	/* Allocate a record. UUIDs are not NUL-terminated. */
+	se = ch_malloc( sizeof( slog_entry ) + uuid.bv_len + csn.bv_len + 1 );
+	se->se_tag = type->tag;
+
+	se->se_uuid.bv_val = (char *)(&se[1]);
+	AC_MEMCPY( se->se_uuid.bv_val, uuid.bv_val, uuid.bv_len );
+	se->se_uuid.bv_len = uuid.bv_len;
+
+	se->se_csn.bv_val = se->se_uuid.bv_val + uuid.bv_len;
+	AC_MEMCPY( se->se_csn.bv_val, csn.bv_val, csn.bv_len );
+	se->se_csn.bv_val[csn.bv_len] = '\0';
+	se->se_csn.bv_len = csn.bv_len;
+	se->se_sid = slap_parse_csn_sid( &se->se_csn );
+
+	for ( i=0; i < sl->sl_numcsns; i++ ) {
+		if ( se->se_sid <= sl->sl_sids[i] ) {
+			break;
+		}
+	}
+	if ( i == sl->sl_numcsns ||
+			se->se_sid != sl->sl_sids[i] ||
+			csn.bv_len != sl->sl_mincsn[i].bv_len ||
+			ber_bvcmp( &csn, &sl->sl_mincsn[i] ) > 0 ) {
+		/* Either this accesslog DB doesn't correspond to the DB or we received
+		 * the entries out of order, either way, we can't use anything we have
+		 * seen */
+		rs->sr_err = LDAP_OTHER;
+		goto done;
+	}
+	AC_MEMCPY( sl->sl_mincsn[i].bv_val, csn.bv_val, csn.bv_len );
+
+	ldap_pvt_thread_mutex_lock( &sl->sl_mutex );
+	if ( tavl_insert( &sl->sl_entries, se, syncprov_sessionlog_cmp, avl_dup_error ) ) {
+		rs->sr_err = LDAP_CONSTRAINT_VIOLATION;
+	} else {
+		sl->sl_num++;
+	}
+	ldap_pvt_thread_mutex_unlock( &sl->sl_mutex );
+
+done:
+	if ( rs->sr_err ) {
+		if ( se ) {
+			ch_free( se );
+		}
+		op->o_abandon = 1;
+		Debug( LDAP_DEBUG_SYNC, "syncprov_accesslog_cb: "
+				"cannot load accesslog entry to sessionlog dn='%s' rc=%d\n",
+				e->e_nname.bv_val, rs->sr_err, 0 );
+	}
+
+	return rs->sr_err;
+}
+
 /* enter with sl->sl_mutex locked, release before returning */
 static void
 syncprov_playlog( Operation *op, SlapReply *rs, sessionlog *sl,
@@ -2904,7 +3035,8 @@ enum {
 	SP_CHKPT = 1,
 	SP_SESSL,
 	SP_NOPRES,
-	SP_USEHINT
+	SP_USEHINT,
+	SP_LOGDB
 };
 
 static ConfigDriver sp_cf_gen;
@@ -2926,6 +3058,10 @@ static ConfigTable spcfg[] = {
 		sp_cf_gen, "( OLcfgOvAt:1.4 NAME 'olcSpReloadHint' "
 			"DESC 'Observe Reload Hint in Request control' "
 			"SYNTAX OMsBoolean SINGLE-VALUE )", NULL, NULL },
+	{ "syncprov-sessionlog-source", NULL, 2, 2, 0, ARG_DN|ARG_MAGIC|SP_LOGDB,
+		sp_cf_gen, "( OLcfgOvAt:1.5 NAME 'olcSpSessionlogSource' "
+			"DESC 'On startup, try loading sessionlog from this subtree' "
+			"SYNTAX OMsDN SINGLE-VALUE )", NULL, NULL },
 	{ NULL, NULL, 0, 0, 0, ARG_IGNORED }
 };
 
@@ -2938,6 +3074,7 @@ static ConfigOCs spocs[] = {
 			"$ olcSpSessionlog "
 			"$ olcSpNoPresent "
 			"$ olcSpReloadHint "
+			"$ olcSpSessionlogSource "
 		") )",
 			Cft_Overlay, spcfg },
 	{ NULL, 0, NULL }
@@ -2991,6 +3128,14 @@ sp_cf_gen(ConfigArgs *c)
 				rc = 1;
 			}
 			break;
+		case SP_LOGDB:
+			if ( BER_BVISEMPTY( &si->si_log_init_dn ) ) {
+				rc = 1;
+			} else {
+				value_add_one( &c->rvalue_vals, &si->si_log_init_dn );
+				value_add_one( &c->rvalue_nvals, &si->si_log_init_dn );
+			}
+			break;
 		}
 		return rc;
 	} else if ( c->op == LDAP_MOD_DELETE ) {
@@ -3016,6 +3161,14 @@ sp_cf_gen(ConfigArgs *c)
 				si->si_usehint = 0;
 			else
 				rc = LDAP_NO_SUCH_ATTRIBUTE;
+			break;
+		case SP_LOGDB:
+			if ( BER_BVISNULL( &si->si_log_init_dn ) ) {
+				rc = LDAP_NO_SUCH_ATTRIBUTE;
+			} else {
+				ch_free( si->si_log_init_dn.bv_val );
+				BER_BVZERO( &si->si_log_init_dn );
+			}
 			break;
 		}
 		return rc;
@@ -3083,6 +3236,22 @@ sp_cf_gen(ConfigArgs *c)
 	case SP_USEHINT:
 		si->si_usehint = c->value_int;
 		break;
+	case SP_LOGDB:
+		if ( CONFIG_ONLINE_ADD( c )) {
+			if ( !select_backend( &c->value_ndn, 0 ) ) {
+				snprintf( c->cr_msg, sizeof( c->cr_msg ),
+					"<%s> no matching backend found for suffix",
+					c->argv[0] );
+				Debug( LDAP_DEBUG_ANY, "%s: %s \"%s\"\n",
+					c->log, c->cr_msg, c->value_dn.bv_val );
+				rc = 1;
+			}
+			ch_free( c->value_ndn.bv_val );
+		} else {
+			si->si_log_init_dn = c->value_ndn;
+		}
+		ch_free( c->value_dn.bv_val );
+		break;
 	}
 	return rc;
 }
@@ -3099,6 +3268,192 @@ syncprov_db_otask(
 	return NULL;
 }
 
+static void *
+syncprov_sessionlog_init_otask(
+	void *ptr
+)
+{
+	Operation			*op = ptr;
+	slap_overinst		*on = (slap_overinst *)op->o_bd->bd_info;
+	syncprov_info_t		*si = on->on_bi.bi_private;
+
+	struct berval zero = BER_BVC("0"),
+				  auditWriteObject = BER_BVC("auditWriteObject"),
+				  auditExtended = BER_BVC("auditExtended");
+	slap_callback cb = {0};
+	SlapReply frs = { REP_RESULT };
+	Filter *f;
+	AttributeAssertion *eq;
+	MatchingRuleAssertion mr = {};
+	BackendDB *db, *orig;
+	void *res;
+
+	db = select_backend( &si->si_log_init_dn, 0 );
+	if ( !db ) {
+		Debug( LDAP_DEBUG_ANY, "syncprov_load_sessionlog: "
+				"configured accesslog database dn='%s' not present\n",
+				si->si_log_init_dn.bv_val, 0, 0 );
+		return (void *)LDAP_NO_SUCH_OBJECT;
+	}
+
+	/*
+	 * Filter is
+	 * (&
+	 *  (reqResult=0)
+	 *  (reqDN:dnSubtreeMatch:=<backend-suffix>)
+	 *  (|
+	 *   (objectclass=auditWriteObject)
+	 *   (objectclass=auditExtended)
+	 * ))
+	 */
+	f = ch_calloc( 6, sizeof(Filter) );
+	eq = ch_calloc( 3, sizeof(AttributeAssertion) );
+
+	f[0].f_choice = LDAP_FILTER_AND;
+	f[0].f_and = &f[1];
+	f[0].f_next = NULL;
+
+	f[1].f_choice = LDAP_FILTER_EQUALITY;
+	f[1].f_ava = &eq[0];
+	f[1].f_av_desc = ad_reqResult;
+	f[1].f_av_value = zero;
+	f[1].f_next = &f[2];
+
+	f[2].f_choice = LDAP_FILTER_EXT;
+	f[2].f_mra = &mr;
+	f[2].f_mr_desc = ad_reqDN;
+	f[2].f_mr_rule = slap_schema.si_mr_dnSubtreeMatch;
+	f[2].f_mr_value = op->o_bd->be_nsuffix[0];
+	f[2].f_next = &f[3];
+
+	f[3].f_choice = LDAP_FILTER_OR;
+	f[3].f_or = &f[4];
+	f[3].f_next = NULL;
+
+	f[4].f_choice = LDAP_FILTER_EQUALITY;
+	f[4].f_ava = &eq[1];
+	f[4].f_av_desc = slap_schema.si_ad_objectClass;
+	f[4].f_av_value = auditWriteObject;
+	f[4].f_next = &f[5];
+
+	f[5].f_choice = LDAP_FILTER_EQUALITY;
+	f[5].f_ava = &eq[2];
+	f[5].f_av_desc = slap_schema.si_ad_objectClass;
+	f[5].f_av_value = auditExtended;
+	f[5].f_next = NULL;
+
+	op->ors_filter = f;
+	filter2bv( f, &op->ors_filterstr );
+
+	op->o_tag = LDAP_REQ_SEARCH;
+	op->o_req_dn = si->si_log_init_dn;
+	op->o_req_ndn = si->si_log_init_dn;
+	op->ors_scope = LDAP_SCOPE_SUBTREE;
+
+	/* We want pure entries, not referrals */
+	op->o_managedsait = SLAP_CONTROL_CRITICAL;
+
+	/* TODO: Invert ordering, from newest to oldest */
+	op->ors_limit = NULL;
+	op->ors_slimit = si->si_logs->sl_size;
+	op->ors_tlimit = SLAP_NO_LIMIT;
+
+	cb.sc_response = accesslog_cb;
+	cb.sc_private = on;
+	op->o_callback = &cb;
+
+	orig = op->o_bd;
+	op->o_bd = db;
+	res = (void *)(long)op->o_bd->be_search( op, &frs );
+	op->o_bd = orig;
+
+	ch_free( f );
+	ch_free( eq );
+	ch_free( op->ors_filterstr.bv_val );
+
+	return res;
+}
+
+static int
+syncprov_load_sessionlog(
+	Operation *op
+)
+{
+	slap_overinst   *on = (slap_overinst *) op->o_bd->bd_info;
+	syncprov_info_t *si = (syncprov_info_t *)on->on_bi.bi_private;
+	sessionlog *sl = si->si_logs;
+	BackendDB *db;
+	void *res;
+	const char *text;
+	ldap_pvt_thread_t tid;
+	int rc = LDAP_SUCCESS;
+
+	if ( BER_BVISNULL( &si->si_log_init_dn ) ) {
+		return rc;
+	}
+
+	if ( !ad_reqType ) {
+		if ( slap_str2ad( "reqType", &ad_reqType, &text ) ) {
+			Debug( LDAP_DEBUG_ANY, "syncprov_load_sessionlog: "
+					"couldn't get definition for attribute reqType, "
+					"is accessslog configured?\n", 0, 0, 0 );
+			return rc;
+		}
+	}
+
+	if ( !ad_reqResult ) {
+		if ( slap_str2ad( "reqResult", &ad_reqResult, &text ) ) {
+			Debug( LDAP_DEBUG_ANY, "syncprov_load_sessionlog: "
+					"couldn't get definition for attribute reqResult, "
+					"is accessslog configured?\n", 0, 0, 0 );
+			return rc;
+		}
+	}
+
+	if ( !ad_reqDN ) {
+		if ( slap_str2ad( "reqDN", &ad_reqDN, &text ) ) {
+			Debug( LDAP_DEBUG_ANY, "syncprov_load_sessionlog: "
+					"couldn't get definition for attribute reqDN, "
+					"is accessslog configured?\n", 0, 0, 0 );
+			return rc;
+		}
+	}
+
+	if ( !ad_reqEntryUUID ) {
+		if ( slap_str2ad( "reqEntryUUID", &ad_reqEntryUUID, &text ) ) {
+			Debug( LDAP_DEBUG_ANY, "syncprov_load_sessionlog: "
+					"couldn't get definition for attribute reqEntryUUID, "
+					"is accessslog configured?\n", 0, 0, 0 );
+			return rc;
+		}
+	}
+
+	ldap_pvt_thread_create( &tid, 0, syncprov_sessionlog_init_otask, op );
+	ldap_pvt_thread_join( tid, &res );
+
+	switch ((int)res) {
+		case LDAP_CONSTRAINT_VIOLATION:
+			Debug( LDAP_DEBUG_TRACE, "syncprov_db_open: "
+					"some entries couldn't be processed, "
+					"stopped at oldest useable one\n", 0, 0, 0 );
+			break;
+		case LDAP_SIZELIMIT_EXCEEDED:
+		case LDAP_NO_SUCH_OBJECT:
+		case LDAP_SUCCESS:
+			break;
+		default:
+			Debug( LDAP_DEBUG_ANY, "syncprov_db_open: "
+					"database contents inconsistent, "
+					"starting with an empty sessionlog\n", 0, 0, 0 );
+			tavl_free( sl->sl_entries, (AVL_FREE)ch_free );
+			sl->sl_num = 0;
+			sl->sl_entries = NULL;
+			rc = LDAP_OTHER;
+			break;
+	}
+
+	return rc;
+}
 
 /* Read any existing contextCSN from the underlying db.
  * Then search for any entries newer than that. If no value exists,
@@ -3206,6 +3561,18 @@ syncprov_db_open(
 		sl->sl_sids = ch_malloc( si->si_numcsns * sizeof(int) );
 		for ( i=0; i < si->si_numcsns; i++ )
 			sl->sl_sids[i] = si->si_sids[i];
+
+		if ( syncprov_load_sessionlog( op ) != LDAP_SUCCESS ) {
+			/* we have failed AND tainted mincsn, need to re-set it again */
+			ber_bvarray_free( sl->sl_mincsn );
+			ber_bvarray_dup_x( &sl->sl_mincsn, si->si_ctxcsn, NULL );
+
+			sl->sl_numcsns = si->si_numcsns;
+			ch_free( sl->sl_sids );
+			sl->sl_sids = ch_malloc( si->si_numcsns * sizeof(int) );
+			for ( i=0; i < si->si_numcsns; i++ )
+				sl->sl_sids[i] = si->si_sids[i];
+		}
 	}
 
 out:
