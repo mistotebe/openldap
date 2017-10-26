@@ -118,7 +118,6 @@ typedef struct syncmatches {
 
 /* Session log data */
 typedef struct slog_entry {
-	struct slog_entry *se_next;
 	struct berval se_uuid;
 	struct berval se_csn;
 	int	se_sid;
@@ -131,8 +130,7 @@ typedef struct sessionlog {
 	int		sl_numcsns;
 	int		sl_num;
 	int		sl_size;
-	slog_entry *sl_head;
-	slog_entry *sl_tail;
+	TAvlnode *sl_entries;
 	ldap_pvt_thread_mutex_t sl_mutex;
 } sessionlog;
 
@@ -388,6 +386,28 @@ sp_avl_cmp( const void *c1, const void *c2 )
 
 	if ( rc ) return rc;
 	return ber_bvcmp( &m1->mt_dn, &m2->mt_dn );
+}
+
+static int
+syncprov_sessionlog_cmp( const void *l, const void *r )
+{
+	const slog_entry *left = l, *right = r;
+
+	return ber_bvcmp( &left->se_csn, &right->se_csn );
+}
+
+static int
+syncprov_sessionlog_dup( void *o, void *n )
+{
+	slog_entry *old = o, *new = n;
+
+	/* Only time we have two modifications with same CSN is when we detect a
+	 * rename during replication */
+	/* FIXME: Does that imply a consumer coming just between we apply the mod
+	 * and the modify might only receive the former and never hear of the
+	 * latter? */
+	return old->se_tag != LDAP_REQ_MODRDN ||
+		new->se_tag != LDAP_REQ_MODIFY;
 }
 
 /* syncprov_findbase:
@@ -1541,6 +1561,7 @@ syncprov_add_slog( Operation *op )
 	syncprov_info_t		*si = on->on_bi.bi_private;
 	sessionlog *sl;
 	slog_entry *se;
+	int rc;
 
 	sl = si->si_logs;
 	{
@@ -1551,12 +1572,9 @@ syncprov_add_slog( Operation *op )
 			 * wipe out anything in the log if we see them.
 			 */
 			ldap_pvt_thread_mutex_lock( &sl->sl_mutex );
-			while ( se = sl->sl_head ) {
-				sl->sl_head = se->se_next;
-				ch_free( se );
-			}
-			sl->sl_tail = NULL;
+			tavl_free( sl->sl_entries, (AVL_FREE)ch_free );
 			sl->sl_num = 0;
+			sl->sl_entries = NULL;
 			ldap_pvt_thread_mutex_unlock( &sl->sl_mutex );
 			return;
 		}
@@ -1564,7 +1582,6 @@ syncprov_add_slog( Operation *op )
 		/* Allocate a record. UUIDs are not NUL-terminated. */
 		se = ch_malloc( sizeof( slog_entry ) + opc->suuid.bv_len +
 			op->o_csn.bv_len + 1 );
-		se->se_next = NULL;
 		se->se_tag = op->o_tag;
 
 		se->se_uuid.bv_val = (char *)(&se[1]);
@@ -1578,50 +1595,18 @@ syncprov_add_slog( Operation *op )
 		se->se_sid = slap_parse_csn_sid( &se->se_csn );
 
 		ldap_pvt_thread_mutex_lock( &sl->sl_mutex );
-		if ( sl->sl_head ) {
-			/* Keep the list in csn order. */
-			if ( ber_bvcmp( &sl->sl_tail->se_csn, &se->se_csn ) <= 0 ) {
-				sl->sl_tail->se_next = se;
-				sl->sl_tail = se;
-			} else {
-				slog_entry **sep;
-
-				for ( sep = &sl->sl_head; *sep; sep = &(*sep)->se_next ) {
-					if ( ber_bvcmp( &se->se_csn, &(*sep)->se_csn ) < 0 ) {
-						se->se_next = *sep;
-						*sep = se;
-						break;
-					}
-				}
-			}
-		} else {
-			sl->sl_head = se;
-			sl->sl_tail = se;
-			if ( !sl->sl_mincsn ) {
-				sl->sl_numcsns = 1;
-				sl->sl_mincsn = ch_malloc( 2*sizeof( struct berval ));
-				sl->sl_sids = ch_malloc( sizeof( int ));
-				sl->sl_sids[0] = se->se_sid;
-				ber_dupbv( sl->sl_mincsn, &se->se_csn );
-				BER_BVZERO( &sl->sl_mincsn[1] );
-			}
-		}
+		rc = tavl_insert( &sl->sl_entries, se, syncprov_sessionlog_cmp, syncprov_sessionlog_dup );
+		assert( rc == LDAP_SUCCESS );
 		sl->sl_num++;
-		while ( sl->sl_num > sl->sl_size ) {
-			int i;
-			se = sl->sl_head;
-			sl->sl_head = se->se_next;
-			for ( i=0; i<sl->sl_numcsns; i++ )
-				if ( sl->sl_sids[i] >= se->se_sid )
-					break;
-			if  ( i == sl->sl_numcsns || sl->sl_sids[i] != se->se_sid ) {
-				slap_insert_csn_sids( (struct sync_cookie *)sl,
-					i, se->se_sid, &se->se_csn );
-			} else {
-				ber_bvreplace( &sl->sl_mincsn[i], &se->se_csn );
+		if ( sl->sl_num > sl->sl_size ) {
+			TAvlnode *edge = tavl_end( sl->sl_entries, TAVL_DIR_LEFT );
+			while ( --sl->sl_num > sl->sl_size ) {
+				TAvlnode *next;
+
+				next = tavl_next( edge, TAVL_DIR_RIGHT );
+				tavl_delete( &sl->sl_entries, edge, syncprov_sessionlog_cmp );
+				edge = next;
 			}
-			ch_free( se );
-			sl->sl_num--;
 		}
 		ldap_pvt_thread_mutex_unlock( &sl->sl_mutex );
 	}
@@ -1643,7 +1628,6 @@ syncprov_playlog( Operation *op, SlapReply *rs, sessionlog *sl,
 	sync_control *srs, BerVarray ctxcsn, int numcsns, int *sids )
 {
 	slap_overinst		*on = (slap_overinst *)op->o_bd->bd_info;
-	slog_entry *se;
 	int i, j, ndel, num, nmods, mmods;
 	char cbuf[LDAP_PVT_CSNSTR_BUFSIZE];
 	BerVarray uuids;
@@ -1672,7 +1656,11 @@ syncprov_playlog( Operation *op, SlapReply *rs, sessionlog *sl,
 	 */
 	Debug( LDAP_DEBUG_SYNC, "srs csn %s\n",
 		srs->sr_state.ctxcsn[0].bv_val, 0, 0 );
-	for ( se=sl->sl_head; se; se=se->se_next ) {
+
+	assert( sl->sl_entries );
+	TAvlnode *entry = tavl_end( sl->sl_entries, TAVL_DIR_LEFT );
+	do {
+		slog_entry *se = entry->avl_data;
 		int k;
 		Debug( LDAP_DEBUG_SYNC, "log csn %s\n", se->se_csn.bv_val, 0, 0 );
 		ndel = 1;
@@ -1712,7 +1700,7 @@ syncprov_playlog( Operation *op, SlapReply *rs, sessionlog *sl,
 		uuids[j].bv_val = uuids[0].bv_val + (j * UUID_LEN);
 		AC_MEMCPY(uuids[j].bv_val, se->se_uuid.bv_val, UUID_LEN);
 		uuids[j].bv_len = UUID_LEN;
-	}
+	} while ( (entry = tavl_next( entry, TAVL_DIR_RIGHT )) != NULL );
 	ldap_pvt_thread_mutex_unlock( &sl->sl_mutex );
 
 	ndel = i;
@@ -3082,7 +3070,7 @@ sp_cf_gen(ConfigArgs *c)
 			sl->sl_sids = NULL;
 			sl->sl_num = 0;
 			sl->sl_numcsns = 0;
-			sl->sl_head = sl->sl_tail = NULL;
+			sl->sl_entries = NULL;
 			ldap_pvt_thread_mutex_init( &sl->sl_mutex );
 			si->si_logs = sl;
 		}
@@ -3325,13 +3313,8 @@ syncprov_db_destroy(
 	if ( si ) {
 		if ( si->si_logs ) {
 			sessionlog *sl = si->si_logs;
-			slog_entry *se = sl->sl_head;
 
-			while ( se ) {
-				slog_entry *se_next = se->se_next;
-				ch_free( se );
-				se = se_next;
-			}
+			tavl_free( sl->sl_entries, (AVL_FREE)ch_free );
 			if ( sl->sl_mincsn )
 				ber_bvarray_free( sl->sl_mincsn );
 			if ( sl->sl_sids )
