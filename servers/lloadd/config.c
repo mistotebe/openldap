@@ -1721,6 +1721,8 @@ read_config(const char *fname, const char *dir) {
 	if ( !fname )
 		fname = LLOADD_DEFAULT_CONFIGFILE;
 
+	cfn = ch_calloc( 1, sizeof(ConfigFile));
+
 	return read_config_file(fname, 0, NULL, config_back_cf_table);
 }
 
