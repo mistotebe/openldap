@@ -304,7 +304,6 @@ connection_destroy( Connection *c )
     assert( c->c_refcnt == 0 );
     assert( c->c_state == LLOAD_C_INVALID );
 
-    evutil_closesocket( c->c_fd );
     ber_sockbuf_free( c->c_sb );
 
     if ( c->c_currentber ) {
