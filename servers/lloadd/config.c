@@ -69,7 +69,8 @@ char	*global_host = NULL;
 static FILE *logfile;
 static char	*logfileName;
 
-static struct timeval timeout_write_tv = { 10, 0 };
+static struct timeval timeout_api_tv, timeout_net_tv,
+					  timeout_write_tv = { 10, 0 };
 
 slap_features_t slap_features;
 
@@ -81,6 +82,8 @@ int	slap_conn_max_pending_auth = LLOAD_CONN_MAX_PENDING_AUTH;
 
 int slap_conn_max_pdus_per_cycle = LLOAD_CONN_MAX_PDUS_PER_CYCLE_DEFAULT;
 
+struct timeval *lload_timeout_api = NULL;
+struct timeval *lload_timeout_net = NULL;
 struct timeval *lload_write_timeout = &timeout_write_tv;
 
 char   *slapd_pid_file  = NULL;
@@ -577,6 +580,20 @@ config_bindconf(ConfigArgs *c) {
         ptr = lutil_strcopy( lloadd_identity.bv_val, "dn:" );
         ptr = lutil_strncopy( ptr, bindconf.sb_binddn.bv_val, bindconf.sb_binddn.bv_len );
         *ptr = '\0';
+    }
+
+    if ( bindconf.sb_timeout_api ) {
+        timeout_api_tv.tv_sec = bindconf.sb_timeout_api;
+        lload_timeout_api = &timeout_api_tv;
+    } else {
+        lload_timeout_api = NULL;
+    }
+
+    if ( bindconf.sb_timeout_net ) {
+        timeout_net_tv.tv_sec = bindconf.sb_timeout_net;
+        lload_timeout_net = &timeout_net_tv;
+    } else {
+        lload_timeout_net = NULL;
     }
 
 #ifdef HAVE_TLS
