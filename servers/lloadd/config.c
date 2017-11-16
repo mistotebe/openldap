@@ -64,11 +64,12 @@ slap_mask_t		global_allows = 0;
 slap_mask_t		global_disallows = 0;
 int		global_gentlehup = 0;
 int		global_idletimeout = 0;
-int		global_writetimeout = 0;
 char	*global_host = NULL;
 
 static FILE *logfile;
 static char	*logfileName;
+
+static struct timeval timeout_write_tv = { 10, 0 };
 
 slap_features_t slap_features;
 
@@ -80,7 +81,7 @@ int	slap_conn_max_pending_auth = LLOAD_CONN_MAX_PENDING_AUTH;
 
 int slap_conn_max_pdus_per_cycle = LLOAD_CONN_MAX_PDUS_PER_CYCLE_DEFAULT;
 
-int slap_write_timeout = 10000;
+struct timeval *lload_write_timeout = &timeout_write_tv;
 
 char   *slapd_pid_file  = NULL;
 char   *slapd_args_file = NULL;
@@ -146,6 +147,7 @@ enum {
 	CFG_THREADQS,
 	CFG_TLS_ECNAME,
 	CFG_RESCOUNT,
+	CFG_WRTIMEOUT,
 
 	CFG_LAST
 };
@@ -307,8 +309,8 @@ static ConfigTable config_back_cf_table[] = {
 		ARG_IGNORED, NULL,
 #endif
     },
-	{ "writetimeout", "timeout", 2, 2, 0, ARG_INT,
-		&global_writetimeout },
+	{ "writetimeout", "ms timeout", 2, 2, 0, ARG_INT|ARG_MAGIC|CFG_WRTIMEOUT,
+		&config_generic },
 	{ NULL,	NULL, 0, 0, 0, ARG_IGNORED,
 		NULL }
 };
@@ -387,6 +389,23 @@ config_generic(ConfigArgs *c) {
 				return 1;
 			}
 			slap_conn_max_pdus_per_cycle = c->value_int;
+			break;
+
+		case CFG_WRTIMEOUT:
+			if ( c->value_int < 0 ) {
+				snprintf( c->cr_msg, sizeof( c->cr_msg ),
+					"writetimeout=%d invalid",
+					c->value_int );
+				Debug(LDAP_DEBUG_ANY, "%s: %s\n",
+					c->log, c->cr_msg, 0 );
+				return 1;
+			} else if ( c->value_int > 0 ) {
+				timeout_write_tv.tv_sec = c->value_int / 1000;
+				timeout_write_tv.tv_sec = 1000 * (c->value_int % 1000);
+				lload_write_timeout = &timeout_write_tv;
+			} else {
+				lload_write_timeout = NULL;
+			}
 			break;
 
 
