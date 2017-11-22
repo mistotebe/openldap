@@ -61,9 +61,14 @@ done:
         evutil_closesocket( conn->fd );
         b->b_opening--;
         b->b_failed++;
-        Debug( LDAP_DEBUG_ANY, "upstream_connect_cb: "
-                "fd=%d connection set up failed%s%s\n",
-                s, error ? ": " : "", error ? sock_errstr(error) : "" );
+        if ( what & EV_TIMEOUT ) {
+            Debug( LDAP_DEBUG_ANY, "upstream_connect_cb: "
+                    "fd=%d connection timed out\n", s, 0, 0 );
+        } else {
+            Debug( LDAP_DEBUG_ANY, "upstream_connect_cb: "
+                    "fd=%d connection set up failed%s%s\n",
+                    s, error ? ": " : "", error ? sock_errstr(error) : "" );
+        }
     } else {
         b->b_failed = 0;
     }
