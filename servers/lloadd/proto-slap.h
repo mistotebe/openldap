@@ -243,6 +243,7 @@ LDAP_SLAPD_F (int) operation_send_reject_locked LDAP_P(( Operation *op, int resu
 LDAP_SLAPD_F (void) operation_lost_upstream LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_destroy_from_client LDAP_P((Operation *op));
 LDAP_SLAPD_F (void) operation_destroy_from_upstream LDAP_P((Operation *op));
+LDAP_SLAPD_F (void) operations_timeout LDAP_P(( evutil_socket_t s, short what, void *arg ));
 
 /*
  * sl_malloc.c
