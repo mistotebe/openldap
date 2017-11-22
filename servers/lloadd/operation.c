@@ -518,6 +518,38 @@ fail:
 }
 
 /*
+ * Entered with op->o_upstream->c_write_mutex held.
+ */
+int
+operation_send_abandon( Operation *op )
+{
+    Connection *upstream = op->o_upstream;
+    BerElement *ber;
+    int rc;
+
+    ber = upstream->c_pendingber;
+    if ( ber == NULL && ( ber = ber_alloc() ) == NULL ) {
+        Debug( LDAP_DEBUG_ANY, "operation_send_abandon: "
+                "ber_alloc failed\n", 0, 0, 0 );
+        ldap_pvt_thread_mutex_unlock( &upstream->c_write_mutex );
+        return -1;
+    }
+    upstream->c_pendingber = ber;
+
+    rc = ber_printf( ber, "t{titi}", LDAP_TAG_MESSAGE,
+            LDAP_TAG_MSGID, upstream->c_next_msgid++,
+            LDAP_REQ_ABANDON, op->o_upstream_msgid );
+
+    if ( rc == LBER_ERROR ) {
+        ber_free( ber, 1 );
+        upstream->c_pendingber = NULL;
+        return -1;
+    }
+
+    return LDAP_SUCCESS;
+}
+
+/*
  * Will remove the operation from its upstream and if it was still there,
  * sends an abandon request.
  *
@@ -528,9 +560,8 @@ void
 operation_abandon( Operation *op )
 {
     Connection *c;
-    BerElement *ber;
     Backend *b;
-    int rc;
+    int rc = LDAP_SUCCESS;
 
     ldap_pvt_thread_mutex_lock( &op->o_link_mutex );
     c = op->o_upstream;
@@ -557,29 +588,10 @@ operation_abandon( Operation *op )
     ldap_pvt_thread_mutex_unlock( &b->b_mutex );
 
     ldap_pvt_thread_mutex_lock( &c->c_write_mutex );
-
-    ber = c->c_pendingber;
-    if ( ber == NULL && ( ber = ber_alloc() ) == NULL ) {
-        Debug( LDAP_DEBUG_ANY, "operation_abandon: "
-                "ber_alloc failed\n", 0, 0, 0 );
-        ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
-        CONNECTION_LOCK_DECREF(c);
-        goto unlock;
-    }
-    c->c_pendingber = ber;
-
-    rc = ber_printf( ber, "t{titi}", LDAP_TAG_MESSAGE,
-            LDAP_TAG_MSGID, c->c_next_msgid++,
-            LDAP_REQ_ABANDON, op->o_upstream_msgid );
-
-    if ( rc == -1 ) {
-        ber_free( ber, 1 );
-        c->c_pendingber = NULL;
-    }
-
+    rc = operation_send_abandon( op );
     ldap_pvt_thread_mutex_unlock( &c->c_write_mutex );
 
-    if ( rc != -1 ) {
+    if ( rc == LDAP_SUCCESS ) {
         connection_write_cb( -1, 0, c );
     }
 
@@ -594,7 +606,11 @@ unlock:
     if ( !c->c_live ) {
         operation_destroy_from_upstream( op );
     }
-    CONNECTION_UNLOCK_OR_DESTROY(c);
+    if ( rc ) {
+        CONNECTION_DESTROY(c);
+    } else {
+        CONNECTION_UNLOCK_OR_DESTROY(c);
+    }
 
 done:
     c = op->o_client;
