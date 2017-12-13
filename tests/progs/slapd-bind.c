@@ -40,6 +40,7 @@
 #include "slapd-common.h"
 
 #define LOOPS	100
+#define RETRIES 0
 
 static int
 do_bind( char *uri, char *dn, struct berval *pass, int maxloop,
@@ -48,7 +49,7 @@ do_bind( char *uri, char *dn, struct berval *pass, int maxloop,
 
 static int
 do_base( char *uri, char *dn, struct berval *pass, char *base, char *filter, char *pwattr,
-	int maxloop, int force, int chaserefs, int noinit, int delay,
+	int maxloop, int maxretries, int force, int chaserefs, int noinit, int delay,
 	int action_type, void *action );
 
 /* This program can be invoked two ways: if -D is used to specify a Bind DN,
@@ -77,6 +78,7 @@ usage( char *name, char opt )
 		"[-C] "
 		"[-I] "
 		"[-i <ignore>] "
+		"[-r <maxretries>] "
 		"[-t delay]\n",
 		name );
 	exit( EXIT_FAILURE );
@@ -99,6 +101,7 @@ main( int argc, char **argv )
 	int		force = 0;
 	int		chaserefs = 0;
 	int		noinit = 1;
+	int		retries = RETRIES;
 	int		delay = 0;
 
 	/* extra action to do after bind... */
@@ -120,7 +123,7 @@ main( int argc, char **argv )
 	/* by default, tolerate invalid credentials */
 	tester_ignore_str2errlist( "INVALID_CREDENTIALS" );
 
-	while ( ( i = getopt( argc, argv, "a:B:b:D:Ff:H:h:Ii:L:l:p:t:w:" ) ) != EOF )
+	while ( ( i = getopt( argc, argv, "a:B:b:D:Ff:H:h:Ii:L:l:p:r:t:w:" ) ) != EOF )
 	{
 		switch ( i ) {
 		case 'a':
@@ -229,6 +232,12 @@ main( int argc, char **argv )
 			noinit = 0;
 			break;
 
+		case 'r':		/* number of retries */
+			if ( lutil_atoi( &retries, optarg ) != 0 ) {
+				usage( argv[0], 'r' );
+			}
+			break;
+
 		case 't':
 			/* sleep between binds */
 			if ( lutil_atoi( &delay, optarg ) != 0 ) {
@@ -253,7 +262,7 @@ main( int argc, char **argv )
 
 		if ( base != NULL ) {
 			rc = do_base( uri, dn, &pass, base, filter, pwattr, loops,
-				force, chaserefs, noinit, delay, -1, NULL );
+				retries, force, chaserefs, noinit, delay, -1, NULL );
 		} else {
 			rc = do_bind( uri, dn, &pass, loops,
 				force, chaserefs, noinit, NULL, -1, NULL );
@@ -414,11 +423,11 @@ do_bind( char *uri, char *dn, struct berval *pass, int maxloop,
 
 static int
 do_base( char *uri, char *dn, struct berval *pass, char *base, char *filter, char *pwattr,
-	int maxloop, int force, int chaserefs, int noinit, int delay,
+	int maxloop, int maxretries, int force, int chaserefs, int noinit, int delay,
 	int action_type, void *action )
 {
 	LDAP	*ld = NULL;
-	int  	i = 0;
+	int  	i = 0, do_retry = maxretries;;
 	int     rc = LDAP_SUCCESS;
 	ber_int_t msgid;
 	LDAPMessage *res, *msg;
@@ -434,6 +443,7 @@ do_base( char *uri, char *dn, struct berval *pass, char *base, char *filter, cha
 	int version = LDAP_VERSION3;
 	char *nullstr = "";
 
+retry:;
 	ldap_initialize( &ld, uri );
 	if ( ld == NULL ) {
 		tester_perror( "ldap_initialize", NULL );
@@ -446,6 +456,18 @@ do_base( char *uri, char *dn, struct berval *pass, char *base, char *filter, cha
 
 	rc = ldap_sasl_bind_s( ld, dn, LDAP_SASL_SIMPLE, pass, NULL, NULL, NULL );
 	if ( rc != LDAP_SUCCESS ) {
+		tester_ldap_error( ld, "ldap_sasl_bind_s", NULL );
+		switch ( rc ) {
+		case LDAP_BUSY:
+		case LDAP_UNAVAILABLE:
+			if ( do_retry > 0 ) {
+				do_retry--;
+				if ( delay > 0 ) {
+				    sleep( delay );
+				}
+				goto retry;
+			}
+		}
 		tester_ldap_error( ld, "ldap_sasl_bind_s", NULL );
 		exit( EXIT_FAILURE );
 	}
