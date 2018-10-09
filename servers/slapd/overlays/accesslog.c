@@ -736,6 +736,9 @@ accesslog_purge( void *ctx, void *arg )
 			op->o_no_schema_check = 1;
 			op->o_managedsait = SLAP_CONTROL_NONCRITICAL;
 			if ( !slapd_shutdown ) {
+				Debug( LDAP_DEBUG_SYNC, "accesslog_purge: "
+						"updating minCSN with %d values\n",
+						li->li_numcsns, 0, 0 );
 				op->o_bd->be_modify( op, &rs );
 			}
 		}
@@ -1940,6 +1943,9 @@ static int accesslog_response(Operation *op, SlapReply *rs) {
 			op2.orm_modlist = &mod;
 			op2.orm_no_opattrs = 1;
 
+			Debug( LDAP_DEBUG_SYNC, "accesslog_response: "
+					"adding a new csn=%s into minCSN\n",
+					bv[0].bv_val, 0, 0 );
 			rs_reinit( &rs2, REP_RESULT );
 			op2.o_bd->be_modify( &op2, &rs2 );
 			if ( rs2.sr_err != LDAP_SUCCESS ) {
@@ -2280,11 +2286,15 @@ accesslog_db_root(
 				op->o_callback = &nullsc;
 				SLAP_DBFLAGS( op->o_bd ) |= SLAP_DBFLAG_NOLASTMOD;
 
+				Debug( LDAP_DEBUG_SYNC, "accesslog_purge: "
+						"setting up minCSN with %d values\n",
+						a->a_numvals, 0, 0 );
 				op->orm_modlist = &mod;
 				op->orm_no_opattrs = 1;
 				rc = op->o_bd->be_modify( op, &rs );
 			}
-		} else {
+		}
+		if ( a ) {
 			ber_bvarray_dup_x( &li->li_mincsn, a->a_vals, NULL );
 			li->li_numcsns = a->a_numvals;
 			li->li_sids = slap_parse_csn_sids( li->li_mincsn, li->li_numcsns, NULL );
