@@ -783,7 +783,7 @@ check_syncprov(
 		ch_free( si->si_syncCookie.octet_str.bv_val );
 		slap_compose_sync_cookie( NULL, &si->si_syncCookie.octet_str,
 			si->si_syncCookie.ctxcsn, si->si_syncCookie.rid,
-			si->si_syncCookie.sid );
+			si->si_syncCookie.sid, NULL );
 		ch_free( si->si_syncCookie.sids );
 		slap_reparse_sync_cookie( &si->si_syncCookie, op->o_tmpmemctx );
 	}
@@ -948,7 +948,7 @@ do_syncrep1(
 		ch_free( si->si_syncCookie.octet_str.bv_val );
 		slap_compose_sync_cookie( NULL, &si->si_syncCookie.octet_str,
 			si->si_syncCookie.ctxcsn, si->si_syncCookie.rid,
-			si->si_syncCookie.sid );
+			si->si_syncCookie.sid, NULL );
 	} else {
 		/* ITS#6367: recreate the cookie so it has our SID, not our peer's */
 		ch_free( si->si_syncCookie.octet_str.bv_val );
@@ -958,7 +958,7 @@ do_syncrep1(
 		if ( BER_BVISNULL( &si->si_syncCookie.octet_str ))
 			slap_compose_sync_cookie( NULL, &si->si_syncCookie.octet_str,
 				si->si_syncCookie.ctxcsn, si->si_syncCookie.rid,
-				si->si_syncCookie.sid );
+				si->si_syncCookie.sid, NULL );
 	}
 
 	}
@@ -1875,7 +1875,7 @@ reload:
 			if ( BER_BVISNULL( &si->si_syncCookie.octet_str ))
 				slap_compose_sync_cookie( NULL, &si->si_syncCookie.octet_str,
 					si->si_syncCookie.ctxcsn, si->si_syncCookie.rid,
-					si->si_syncCookie.sid );
+					si->si_syncCookie.sid, NULL );
 			rc = ldap_sync_search( si, op->o_tmpmemctx );
 			goto reload;
 		}
