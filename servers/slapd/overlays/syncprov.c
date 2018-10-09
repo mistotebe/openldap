@@ -326,10 +326,18 @@ syncprov_sendinfo(
 	if ( type ) {
 		switch ( type ) {
 		case LDAP_TAG_SYNC_NEW_COOKIE:
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_sendinfo: "
+					"sending a new cookie=%s\n",
+					op->o_log_prefix, cookie->bv_val );
 			ber_printf( ber, "tO", type, cookie );
 			break;
 		case LDAP_TAG_SYNC_REFRESH_DELETE:
 		case LDAP_TAG_SYNC_REFRESH_PRESENT:
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_sendinfo: "
+					"%s cookie=%s\n",
+					op->o_log_prefix,
+					type == LDAP_TAG_SYNC_REFRESH_DELETE ? "refreshDelete" : "refreshPresent",
+					cookie ? cookie->bv_val : "" );
 			ber_printf( ber, "t{", type );
 			if ( cookie ) {
 				ber_printf( ber, "O", cookie );
@@ -340,6 +348,10 @@ syncprov_sendinfo(
 			ber_printf( ber, "N}" );
 			break;
 		case LDAP_TAG_SYNC_ID_SET:
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_sendinfo: "
+					"%s syncIdSet cookie=%s\n",
+					op->o_log_prefix, refreshDeletes ? "delete" : "present",
+					cookie ? cookie->bv_val : "" );
 			ber_printf( ber, "t{", type );
 			if ( cookie ) {
 				ber_printf( ber, "O", cookie );
@@ -352,8 +364,8 @@ syncprov_sendinfo(
 			break;
 		default:
 			Debug( LDAP_DEBUG_TRACE,
-				"syncprov_sendinfo: invalid syncinfo type (%d)\n",
-				type );
+				"%s syncprov_sendinfo: invalid syncinfo type (%d)\n",
+				op->o_log_prefix, type );
 			return LDAP_OTHER;
 		}
 	}
@@ -472,6 +484,7 @@ syncprov_findbase( Operation *op, fbase_cookie *fc )
 		fop.ors_filter = &generic_filter;
 		fop.ors_filterstr = generic_filterstr;
 
+		Debug( LDAP_DEBUG_SYNC, "syncprov_findbase: searching\n" );
 		rc = fop.o_bd->be_search( &fop, &frs );
 	} else {
 		ldap_pvt_thread_mutex_unlock( &fc->fss->s_mutex );
@@ -634,6 +647,15 @@ syncprov_findcsn( Operation *op, find_csn_t mode, struct berval *csn )
 		srs = op->o_controls[slap_cids.sc_LDAPsync];
 	}
 
+	Debug( LDAP_DEBUG_SYNC, "%s syncprov_findcsn: mode=%s csn=%s\n",
+			op->o_log_prefix,
+			mode == FIND_MAXCSN ?
+				"FIND_MAXCSN" :
+				mode == FIND_CSN ?
+					"FIND_CSN" :
+					"FIND_PRESENT",
+			csn ? csn->bv_val : "" );
+
 	fop = *op;
 	fop.o_sync_mode &= SLAP_CONTROL_MASK;	/* turn off sync_mode */
 	/* We want pure entries, not referrals */
@@ -754,6 +776,9 @@ again:
 		break;
 	case FIND_CSN:
 		/* If matching CSN was not found, invalidate the context. */
+		Debug( LDAP_DEBUG_SYNC, "syncprov_findcsn: csn%s=%s %sfound\n",
+				cf.f_choice == LDAP_FILTER_EQUALITY ? "=" : "<",
+				cf.f_av_value.bv_val, cb.sc_private ? "" : "not " );
 		if ( !cb.sc_private ) {
 			/* If we didn't find an exact match, then try for <= */
 			if ( findcsn_retry ) {
@@ -866,11 +891,11 @@ syncprov_sendresp( Operation *op, resinfo *ri, syncops *so, int mode )
 
 #ifdef LDAP_DEBUG
 	if ( so->s_sid > 0 ) {
-		Debug( LDAP_DEBUG_SYNC, "syncprov_sendresp: to=%03x, cookie=%s\n",
-			so->s_sid, cookie.bv_val );
+		Debug( LDAP_DEBUG_SYNC, "%s syncprov_sendresp: to=%03x, cookie=%s\n",
+			op->o_log_prefix, so->s_sid, cookie.bv_val );
 	} else {
-		Debug( LDAP_DEBUG_SYNC, "syncprov_sendresp: cookie=%s\n",
-			cookie.bv_val );
+		Debug( LDAP_DEBUG_SYNC, "%s syncprov_sendresp: cookie=%s\n",
+			op->o_log_prefix, cookie.bv_val );
 	}
 #endif
 
@@ -897,10 +922,18 @@ syncprov_sendresp( Operation *op, resinfo *ri, syncops *so, int mode )
 		}
 		/* fallthru */
 	case LDAP_SYNC_MODIFY:
+		Debug( LDAP_DEBUG_SYNC, "%s syncprov_sendresp: "
+				"sending %s, dn=%s\n",
+				op->o_log_prefix,
+				mode == LDAP_SYNC_ADD ? "LDAP_SYNC_ADD" : "LDAP_SYNC_MODIFY",
+				e_uuid.e_nname.bv_val );
 		rs.sr_attrs = op->ors_attrs;
 		rs.sr_err = send_search_entry( op, &rs );
 		break;
 	case LDAP_SYNC_DELETE:
+		Debug( LDAP_DEBUG_SYNC, "%s syncprov_sendresp: "
+				"sending LDAP_SYNC_DELETE, dn=%s\n",
+				op->o_log_prefix, ri->ri_dn.bv_val );
 		e_uuid.e_attrs = NULL;
 		e_uuid.e_name = ri->ri_dn;
 		e_uuid.e_nname = ri->ri_ndn;
@@ -1109,6 +1142,9 @@ syncprov_qresp( opcookie *opc, syncops *so, int mode )
 		slap_compose_sync_cookie( NULL, &ri->ri_cookie, si->si_ctxcsn,
 			so->s_rid, slap_serverID ? slap_serverID : -1, NULL );
 	}
+	Debug( LDAP_DEBUG_SYNC, "%s syncprov_qresp: "
+			"set up a new syncres mode=%d csn=%s\n",
+			so->s_op->o_log_prefix, mode, csn.bv_val );
 	ldap_pvt_thread_mutex_unlock( &ri->ri_mutex );
 
 	ldap_pvt_thread_mutex_lock( &so->s_mutex );
@@ -1235,6 +1271,9 @@ syncprov_matchops( Operation *op, opcookie *opc, int saveit )
 			e = opc->se;
 		}
 		if ( rc ) {
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_matchops: "
+					"%s check, error finding entry dn=%s in database\n",
+					op->o_log_prefix, saveit ? "initial" : "final", fc.fdn->bv_val );
 			op->o_bd = b0;
 			return;
 		}
@@ -1254,6 +1293,8 @@ syncprov_matchops( Operation *op, opcookie *opc, int saveit )
 		a = attr_find( e->e_attrs, slap_schema.si_ad_entryUUID );
 		if ( a )
 			ber_dupbv_x( &opc->suuid, &a->a_nvals[0], op->o_tmpmemctx );
+		Debug( LDAP_DEBUG_SYNC, "syncprov_matchops: %srecording uuid for dn=%s on opc=%p\n",
+				a ? "" : "not ", opc->sdn.bv_val, opc );
 	} else if ( op->o_tag == LDAP_REQ_MODRDN && !saveit ) {
 		op->o_tmpfree( opc->sndn.bv_val, op->o_tmpmemctx );
 		op->o_tmpfree( opc->sdn.bv_val, op->o_tmpmemctx );
@@ -1483,6 +1524,10 @@ syncprov_checkpoint( Operation *op, slap_overinst *on )
 		assert( !syn->ssyn_validate( syn, si->si_ctxcsn+i ));
 	}
 #endif
+
+	Debug( LDAP_DEBUG_SYNC, "%s syncprov_checkpoint: "
+			"running checkpoint\n", op->o_log_prefix );
+
 	mod.sml_numvals = si->si_numcsns;
 	mod.sml_values = si->si_ctxcsn;
 	mod.sml_nvalues = NULL;
@@ -1584,6 +1629,17 @@ syncprov_add_slog( Operation *op )
 		se->se_sid = slap_parse_csn_sid( &se->se_csn );
 
 		ldap_pvt_thread_mutex_lock( &sl->sl_mutex );
+		if ( LogTest( LDAP_DEBUG_SYNC ) ) {
+			char uuidstr[40] = {};
+			if ( !BER_BVISEMPTY( &opc->suuid ) ) {
+				lutil_uuidstr_from_normalized( opc->suuid.bv_val, opc->suuid.bv_len,
+						uuidstr, 40 );
+			}
+
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_add_slog: "
+					"adding csn=%s to sessionlog, uuid=%s\n",
+					op->o_log_prefix, se->se_csn.bv_val, uuidstr );
+		}
 		if ( sl->sl_head ) {
 			/* Keep the list in csn order. */
 			if ( ber_bvcmp( &sl->sl_tail->se_csn, &se->se_csn ) <= 0 ) {
@@ -1776,6 +1832,16 @@ syncprov_play_sessionlog( Operation *op, SlapReply *rs, sync_control *srs,
 		srs->sr_state.ctxcsn[0].bv_val );
 	for ( se=sl->sl_head; se; se=se->se_next ) {
 		int k;
+
+		if ( LogTest( LDAP_DEBUG_SYNC ) ) {
+			char uuidstr[40];
+			lutil_uuidstr_from_normalized( se->se_uuid.bv_val, se->se_uuid.bv_len,
+					uuidstr, 40 );
+			Debug( LDAP_DEBUG_SYNC, "syncprov_play_sessionlog: "
+					"log entry tag=%lu uuid=%s cookie=%s\n",
+					se->se_tag, uuidstr, se->se_csn.bv_val );
+		}
+
 		Debug( LDAP_DEBUG_SYNC, "log csn %s\n", se->se_csn.bv_val );
 		ndel = 1;
 		for ( k=0; k<srs->sr_state.numcsns; k++ ) {
@@ -1815,6 +1881,16 @@ syncprov_play_sessionlog( Operation *op, SlapReply *rs, sync_control *srs,
 		csns[j].bv_val = csns[0].bv_val + (j * LDAP_PVT_CSNSTR_BUFSIZE);
 		AC_MEMCPY(csns[j].bv_val, se->se_csn.bv_val, se->se_csn.bv_len);
 		csns[j].bv_len = se->se_csn.bv_len;
+
+		if ( LogTest( LDAP_DEBUG_SYNC ) ) {
+			char uuidstr[40];
+			lutil_uuidstr_from_normalized( uuids[j].bv_val, uuids[j].bv_len,
+					uuidstr, 40 );
+			Debug( LDAP_DEBUG_SYNC, "syncprov_play_sessionlog: "
+					"picking a %s entry uuid=%s cookie=%s\n",
+					se->se_tag == LDAP_REQ_DELETE ? "deleted" : "modified",
+					uuidstr, csns[j].bv_val );
+		}
 	}
 	ldap_pvt_thread_mutex_lock( &sl->sl_mutex );
 	sl->sl_playing--;
@@ -2488,7 +2564,7 @@ syncprov_search_response( Operation *op, SlapReply *rs )
 				for ( i=0; i<ss->ss_numcsns; i++ ) {
 					if ( sid == ss->ss_sids[i] && ber_bvcmp( &a->a_nvals[0],
 						&ss->ss_ctxcsn[i] ) > 0 ) {
-						Debug( LDAP_DEBUG_SYNC,
+						Debug( LDAP_DEBUG_SYNC, "syncprov_search_response: "
 							"Entry %s CSN %s greater than snapshot %s\n",
 							rs->sr_entry->e_name.bv_val,
 							a->a_nvals[0].bv_val,
@@ -2504,7 +2580,7 @@ syncprov_search_response( Operation *op, SlapReply *rs )
 					if ( sid == srs->sr_state.sids[i] &&
 						ber_bvcmp( &a->a_nvals[0],
 							&srs->sr_state.ctxcsn[i] )<= 0 ) {
-						Debug( LDAP_DEBUG_SYNC,
+						Debug( LDAP_DEBUG_SYNC, "syncprov_search_response: "
 							"Entry %s CSN %s older or equal to ctx %s\n",
 							rs->sr_entry->e_name.bv_val,
 							a->a_nvals[0].bv_val,
@@ -2539,7 +2615,8 @@ syncprov_search_response( Operation *op, SlapReply *rs )
 				srs->sr_state.rid,
 				slap_serverID ? slap_serverID : -1, NULL );
 
-			Debug( LDAP_DEBUG_SYNC, "syncprov_search_response: cookie=%s\n", cookie.bv_val );
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_search_response: "
+					"cookie=%s\n", op->o_log_prefix, cookie.bv_val );
 		}
 
 		/* Is this a regular refresh?
@@ -2577,6 +2654,9 @@ syncprov_search_response( Operation *op, SlapReply *rs )
 				/* Turn off the refreshing flag */
 				ss->ss_so->s_flags ^= PS_IS_REFRESHING;
 
+				Debug( LDAP_DEBUG_SYNC, "%s syncprov_search_response: "
+						"detaching op\n",
+						op->o_log_prefix );
 				syncprov_detach_op( op, ss->ss_so, on );
 
 				ldap_pvt_thread_mutex_unlock( &op->o_conn->c_mutex );
@@ -2618,6 +2698,11 @@ syncprov_op_search( Operation *op, SlapReply *rs )
 	}
 
 	srs = op->o_controls[slap_cids.sc_LDAPsync];
+	Debug( LDAP_DEBUG_SYNC, "%s syncprov_op_search: "
+			"got a %ssearch with a cookie=%s\n",
+			op->o_log_prefix,
+			op->o_sync_mode & SLAP_SYNC_PERSIST ? "persistent ": "",
+			srs->sr_state.octet_str.bv_val );
 
 	/* If this is a persistent search, set it up right away */
 	if ( op->o_sync_mode & SLAP_SYNC_PERSIST ) {
@@ -2681,6 +2766,9 @@ syncprov_op_search( Operation *op, SlapReply *rs )
 		sop->s_si = si;
 		si->si_ops = sop;
 		ldap_pvt_thread_mutex_unlock( &si->si_ops_mutex );
+		Debug( LDAP_DEBUG_SYNC, "%s syncprov_op_search: "
+				"registered persistent search\n",
+				op->o_log_prefix );
 	}
 
 	/* snapshot the ctxcsn
@@ -2740,6 +2828,9 @@ syncprov_op_search( Operation *op, SlapReply *rs )
 
 		if (srs->sr_state.numcsns != numcsns) {
 			/* consumer doesn't have the right number of CSNs */
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_op_search: "
+					"consumer cookie is missing a csn we track\n",
+					op->o_log_prefix );
 			changed = SS_CHANGED;
 			if ( srs->sr_state.ctxcsn ) {
 				ber_bvarray_free_x( srs->sr_state.ctxcsn, op->o_tmpmemctx );
@@ -2818,6 +2909,9 @@ no_change:	if ( !(op->o_sync_mode & SLAP_SYNC_PERSIST) ) {
 				rs->sr_ctrls = NULL;
 				return rs->sr_err;
 			}
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_op_search: "
+					"no change, skipping log replay\n",
+					op->o_log_prefix );
 			goto shortcut;
 		}
 
@@ -2841,6 +2935,9 @@ no_change:	if ( !(op->o_sync_mode & SLAP_SYNC_PERSIST) ) {
 				rs->sr_text = "sync cookie is stale";
 				goto bailout;
 			}
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_op_search: "
+					"failed to find entry with csn=%s, ignoring cookie\n",
+					op->o_log_prefix, mincsn.bv_val );
 			if ( srs->sr_state.ctxcsn ) {
 				ber_bvarray_free_x( srs->sr_state.ctxcsn, op->o_tmpmemctx );
 				srs->sr_state.ctxcsn = NULL;
@@ -2927,6 +3024,9 @@ shortcut:
 	 * us into persist phase
 	 */
 	if ( !changed && !dirty ) {
+		Debug( LDAP_DEBUG_SYNC, "%s syncprov_op_search: "
+				"nothing changed, finishing up initial search early\n",
+				op->o_log_prefix );
 		rs->sr_err = LDAP_SUCCESS;
 		rs->sr_nentries = 0;
 		send_ldap_result( op, rs );
