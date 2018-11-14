@@ -1974,11 +1974,11 @@ accesslog_op_mod( Operation *op, SlapReply *rs )
 	}
 			
 	if ( doit ) {
-		slap_callback *cb = op->o_tmpcalloc( 1, sizeof( slap_callback ), op->o_tmpmemctx ), *cb2;
+		slap_callback *cb = op->o_tmpcalloc( 1, sizeof( slap_callback ), op->o_tmpmemctx );
 		cb->sc_cleanup = accesslog_mod_cleanup;
 		cb->sc_private = on;
-		for ( cb2 = op->o_callback; cb2->sc_next; cb2 = cb2->sc_next );
-		cb2->sc_next = cb;
+		cb->sc_next = op->o_callback;
+		op->o_callback = cb;
 
 #ifdef RMUTEX_DEBUG
 		Debug( LDAP_DEBUG_SYNC,
