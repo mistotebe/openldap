@@ -2110,6 +2110,18 @@ syncrepl_accesslog_mods(
 		default:	continue;
 		}
 
+		if ( colon[2] != ' '
+				&& op != LDAP_MOD_REPLACE && op != LDAP_MOD_DELETE ) {
+			/* ITS#8609: only replace and delete can be valueless */
+			Debug( LDAP_DEBUG_ANY, "syncrepl_accesslog_mods: %s "
+				"Invalid accesslog line '%s'\n",
+				si->si_ridtxt, vals[i].bv_val );
+			slap_mods_free( modlist, 1 );
+			modlist = NULL;
+			rc = -1;
+			break;
+		}
+
 		if ( !mod || ad != mod->sml_desc || op != mod->sml_op ) {
 			mod = (Modifications *) ch_malloc( sizeof( Modifications ) );
 			mod->sml_flags = 0;
