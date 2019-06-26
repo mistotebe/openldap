@@ -964,8 +964,8 @@ do_syncrep1(
 	}
 
 	si->si_refreshDone = 0;
-	Debug( LDAP_DEBUG_SYNC, "do_syncrep1: %s starting refresh\n",
-		si->si_ridtxt );
+	Debug( LDAP_DEBUG_SYNC, "do_syncrep1: %s starting refresh (sending cookie=%s)\n",
+		si->si_ridtxt, si->si_syncCookie.octet_str.bv_val );
 
 	rc = ldap_sync_search( si, op->o_tmpmemctx );
 
@@ -4347,6 +4347,9 @@ syncrepl_del_nonpresent(
 			op->ors_slimit = 1;
 			uf.f_av_value = uuids[i];
 			filter2bv_x( op, op->ors_filter, &op->ors_filterstr );
+			Debug( LDAP_DEBUG_SYNC, "syncrepl_del_nonpresent: %s "
+				"checking non-present filter=%s\n",
+				si->si_ridtxt, op->ors_filterstr.bv_val );
 			rc = be->be_search( op, &rs_search );
 			op->o_tmpfree( op->ors_filterstr.bv_val, op->o_tmpmemctx );
 		}
@@ -5330,6 +5333,8 @@ nonpresent_callback(
 	if ( rs->sr_type == REP_RESULT ) {
 		count = presentlist_free( si->si_presentlist );
 		si->si_presentlist = NULL;
+		Debug( LDAP_DEBUG_SYNC, "nonpresent_callback: %s "
+			"had %d items left in the list\n", si->si_ridtxt, count );
 
 	} else if ( rs->sr_type == REP_SEARCH ) {
 		if ( !( si->si_refreshDelete & NP_DELETE_ONE ) ) {
@@ -5339,12 +5344,12 @@ nonpresent_callback(
 				present_uuid = presentlist_find( si->si_presentlist, &a->a_nvals[0] );
 			}
 
-			Debug(LDAP_DEBUG_SYNC,
-			      "nonpresent_callback: %s %spresent UUID %s, dn %s\n",
-			      si->si_ridtxt,
-			      present_uuid ? "" : "non",
-			      a ? a->a_vals[0].bv_val : "<missing>",
-			      rs->sr_entry->e_name.bv_val );
+			Debug(LDAP_DEBUG_SYNC, "nonpresent_callback: "
+				"%s %spresent UUID %s, dn %s\n",
+				si->si_ridtxt,
+				present_uuid ? "" : "non",
+				a ? a->a_vals[0].bv_val : "<missing>",
+				rs->sr_entry->e_name.bv_val );
 
 			if ( a == NULL ) return 0;
 		}
@@ -5355,6 +5360,9 @@ nonpresent_callback(
 			np_entry->npe_name = ber_dupbv( NULL, &rs->sr_entry->e_name );
 			np_entry->npe_nname = ber_dupbv( NULL, &rs->sr_entry->e_nname );
 			LDAP_LIST_INSERT_HEAD( &si->si_nonpresentlist, np_entry, npe_link );
+			Debug( LDAP_DEBUG_SYNC, "nonpresent_callback: %s "
+				"adding entry %s to non-present list\n",
+				si->si_ridtxt, np_entry->npe_name->bv_val );
 
 		} else {
 			presentlist_delete( &si->si_presentlist, &a->a_nvals[0] );
