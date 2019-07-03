@@ -3850,12 +3850,38 @@ syncrepl_entry(
 
 			Attribute *a = attr_find( entry->e_attrs, slap_schema.si_ad_entryCSN );
 			if ( a ) {
+				int i, sid;
 				/* FIXME: op->o_csn is assumed to be
 				 * on the thread's slab; this needs
 				 * to be cleared ASAP.
 				 */
 				op->o_csn = a->a_vals[0];
 				freecsn = 0;
+				Debug( LDAP_DEBUG_SYNC, "syncrepl_entry: %s "
+					"filling in csn=%s from entry\n",
+					si->si_ridtxt, op->o_csn.bv_val );
+
+				sid = slap_parse_csn_sid( &op->o_csn );
+				check_syncprov( op, si );
+				ldap_pvt_thread_mutex_lock( &si->si_cookieState->cs_mutex );
+				for ( i =0; i<si->si_cookieState->cs_num; i++ ) {
+					/* new SID */
+					if ( sid < si->si_cookieState->cs_sids[i] )
+						break;
+					if ( si->si_cookieState->cs_sids[i] == sid ) {
+						if ( ber_bvcmp( &op->o_csn, &si->si_cookieState->cs_vals[i] ) <= 0 ) {
+							Debug( LDAP_DEBUG_SYNC, "syncrepl_entry: %s CSN too old, ignoring %s (%s)\n",
+								si->si_ridtxt, op->o_csn.bv_val, entry->e_name.bv_val );
+							si->si_too_old = 1;
+							ldap_pvt_thread_mutex_unlock( &si->si_cookieState->cs_mutex );
+							rc = 0;
+							goto done;
+						}
+						si->si_too_old = 0;
+						break;
+					}
+				}
+				ldap_pvt_thread_mutex_unlock( &si->si_cookieState->cs_mutex );
 			}
 		}
 retry_add:;
