@@ -3722,8 +3722,8 @@ syncrepl_entry(
 	int	freecsn = 1;
 
 	Debug( LDAP_DEBUG_SYNC,
-		"syncrepl_entry: %s LDAP_RES_SEARCH_ENTRY(LDAP_SYNC_%s) tid %x\n",
-		si->si_ridtxt, syncrepl_state2str( syncstate ), op->o_tid );
+		"syncrepl_entry: %s LDAP_RES_SEARCH_ENTRY(LDAP_SYNC_%s) csn=%s tid %x\n",
+		si->si_ridtxt, syncrepl_state2str( syncstate ), syncCSN ? syncCSN->bv_val : "(none)", op->o_tid );
 
 	if (( syncstate == LDAP_SYNC_PRESENT || syncstate == LDAP_SYNC_ADD ) ) {
 		if ( !si->si_refreshPresent && !si->si_refreshDone ) {

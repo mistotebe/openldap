@@ -1674,13 +1674,22 @@ syncprov_add_slog( Operation *op )
 			int i;
 			se = sl->sl_head;
 			sl->sl_head = se->se_next;
+			Debug( LDAP_DEBUG_SYNC, "%s syncprov_add_slog: "
+				"expiring csn=%s from sessionlog (sessionlog size=%d)\n",
+				op->o_log_prefix, se->se_csn.bv_val, sl->sl_num );
 			for ( i=0; i<sl->sl_numcsns; i++ )
 				if ( sl->sl_sids[i] >= se->se_sid )
 					break;
 			if  ( i == sl->sl_numcsns || sl->sl_sids[i] != se->se_sid ) {
+				Debug( LDAP_DEBUG_SYNC, "%s syncprov_add_slog: "
+					"adding csn=%s to mincsn\n",
+					op->o_log_prefix, se->se_csn.bv_val );
 				slap_insert_csn_sids( (struct sync_cookie *)sl,
 					i, se->se_sid, &se->se_csn );
 			} else {
+				Debug( LDAP_DEBUG_SYNC, "%s syncprov_add_slog: "
+					"updating mincsn for sid=%d csn=%s to %s\n",
+					op->o_log_prefix, se->se_sid, sl->sl_mincsn[i].bv_val, se->se_csn.bv_val );
 				ber_bvreplace( &sl->sl_mincsn[i], &se->se_csn );
 			}
 			ch_free( se );
@@ -3274,6 +3283,10 @@ syncprov_db_open(
 		return rc;
 	}
 
+	Debug( LDAP_DEBUG_SYNC, "syncprov_db_open: "
+		"starting syncprov for suffix %s\n",
+		be->be_suffix[0].bv_val );
+
 	thrctx = ldap_pvt_thread_pool_context();
 	connection_fake_init2( &conn, &opbuf, thrctx, 0 );
 	op = &opbuf.ob_op;
@@ -3332,6 +3345,9 @@ syncprov_db_open(
 		si->si_numcsns = 1;
 		si->si_sids = ch_malloc( sizeof(int) );
 		si->si_sids[0] = slap_serverID;
+		Debug( LDAP_DEBUG_SYNC, "syncprov_db_open: "
+			"generated a new ctxcsn=%s for suffix %s\n",
+			csn.bv_val, be->be_suffix[0].bv_val );
 
 		/* make sure we do a checkpoint on close */
 		si->si_numops++;
