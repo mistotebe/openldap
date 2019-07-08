@@ -6277,11 +6277,6 @@ config_back_modify( Operation *op, SlapReply *rs )
 			rs->sr_text = "Use modrdn to change the entry name";
 			goto out;
 		}
-		/* Internal update of contextCSN? */
-		if ( ml->sml_desc == slap_schema.si_ad_contextCSN && op->o_conn->c_conn_idx == -1 ) {
-			do_pause = 0;
-			break;
-		}
 	}
 
 	slap_mods_opattrs( op, &op->orm_modlist, 1 );
