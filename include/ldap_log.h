@@ -181,8 +181,8 @@ extern void eb_syslog(int pri, const char *fmt, ...);
 
 #endif /* ! LDAP_DEBUG */
 
-#define Debug(level, ...) \
-	Log((level), ldap_syslog_level, __VA_ARGS__ )
+#define Debug(level, fmt, ...) \
+	Log((level), ldap_syslog_level, "%p " fmt, (void *)ldap_pvt_thread_self(), ##__VA_ARGS__ )
 #endif /* ! LDAP_INT_DEBUG */
 
 /* Actually now in liblber/debug.c */
