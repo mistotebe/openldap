@@ -1118,8 +1118,16 @@ do_syncrep2(
 						/* The notification control is only sent during persist phase */
 						rctrlp = ldap_control_find( LDAP_CONTROL_PERSIST_ENTRY_CHANGE_NOTICE, rctrls, &next );
 						if ( rctrlp ) {
-							if ( !si->si_refreshDone )
+							if ( !si->si_refreshDone ) {
 								si->si_refreshDone = 1;
+								/* TODO: could we have actually tainted the DB
+								 * in DSEE mode? */
+								ldap_pvt_thread_mutex_lock( &si->si_be->be_pcl_mutex );
+								si->si_be->be_refreshing = 0;
+								ldap_pvt_thread_mutex_unlock( &si->si_be->be_pcl_mutex );
+								Debug( LDAP_DEBUG_SYNC, "do_syncrep2: %s its8125 finished refresh\n",
+										si->si_ridtxt );
+							}
 							if ( si->si_refreshDone )
 								syncrepl_dsee_update( si, op );
 						}
@@ -1306,10 +1314,6 @@ logerr:
 						bdn.bv_val[bdn.bv_len] = '\0';
 						Debug( LDAP_DEBUG_SYNC, "do_syncrep2: %s delta-sync lost sync on (%s), switching to REFRESH\n",
 							si->si_ridtxt, bdn.bv_val );
-						if (si->si_strict_refresh) {
-							slap_suspend_listeners();
-							connections_drop();
-						}
 						break;
 					default:
 						break;
@@ -1374,10 +1378,6 @@ logerr:
 					si->si_logstate = SYNCLOG_FALLBACK;
 					Debug( LDAP_DEBUG_SYNC, "do_syncrep2: %s delta-sync lost sync, switching to REFRESH\n",
 						si->si_ridtxt );
-					if (si->si_strict_refresh) {
-						slap_suspend_listeners();
-						connections_drop();
-					}
 				}
 				rc = err;
 				goto done;
@@ -1393,6 +1393,11 @@ logerr:
 					if ( si->si_logstate == SYNCLOG_FALLBACK ) {
 						si->si_logstate = SYNCLOG_LOGGING;
 						si->si_refreshDone = 1;
+						ldap_pvt_thread_mutex_lock( &si->si_be->be_pcl_mutex );
+						si->si_be->be_refreshing = 0;
+						ldap_pvt_thread_mutex_unlock( &si->si_be->be_pcl_mutex );
+						Debug( LDAP_DEBUG_SYNC, "do_syncrep2: %s its8125 finished refresh\n",
+								si->si_ridtxt );
 						rc = LDAP_SYNC_REFRESH_REQUIRED;
 					} else {
 						rc = -2;
@@ -1494,6 +1499,11 @@ logerr:
 				&& si->si_logstate == SYNCLOG_FALLBACK ) {
 				si->si_logstate = SYNCLOG_LOGGING;
 				si->si_refreshDone = 1;
+				ldap_pvt_thread_mutex_lock( &si->si_be->be_pcl_mutex );
+				si->si_be->be_refreshing = 0;
+				ldap_pvt_thread_mutex_unlock( &si->si_be->be_pcl_mutex );
+				Debug( LDAP_DEBUG_SYNC, "do_syncrep2: %s its8125 finished refresh\n",
+						si->si_ridtxt );
 				rc = LDAP_SYNC_REFRESH_REQUIRED;
 				slap_resume_listeners();
 			} else {
@@ -1574,7 +1584,10 @@ logerr:
 					}
 					ber_scanf( ber, /*"{"*/ "}" );
 					if ( si->si_refreshDone ) {
-						Debug( LDAP_DEBUG_SYNC, "do_syncrep1: %s finished refresh\n",
+						ldap_pvt_thread_mutex_lock( &si->si_be->be_pcl_mutex );
+						si->si_be->be_refreshing = 0;
+						ldap_pvt_thread_mutex_unlock( &si->si_be->be_pcl_mutex );
+						Debug( LDAP_DEBUG_SYNC, "do_syncrep1: %s its8125 finished refresh\n",
 							si->si_ridtxt );
 					}
 					if ( abs(si->si_type) == LDAP_SYNC_REFRESH_AND_PERSIST &&
@@ -3720,10 +3733,35 @@ syncrepl_entry(
 	dninfo dni = {0};
 	int	retry = 1;
 	int	freecsn = 1;
+	int refreshing = 1;
 
 	Debug( LDAP_DEBUG_SYNC,
 		"syncrepl_entry: %s LDAP_RES_SEARCH_ENTRY(LDAP_SYNC_%s) csn=%s tid %x\n",
-		si->si_ridtxt, syncrepl_state2str( syncstate ), syncCSN ? syncCSN->bv_val : "(none)", op->o_tid );
+		si->si_ridtxt, syncrepl_state2str( syncstate ),
+		syncCSN ? syncCSN->bv_val : "(none)", op->o_tid );
+
+	if ( !syncCSN || BER_BVISNULL(syncCSN) ) {
+		/*
+		 * ITS#8125: A provider is trying to effect a refresh now, make sure
+		 * syncprov can find out.
+		 */
+		if ( si->si_refreshDone ) {
+			/*
+			 * syncprov will always try to send a cookie with a CSN if possible
+			 * during persist phase, either this isn't OpenLDAP or something
+			 * has gone wrong. Either way we aren't safe to serve a
+			 * refreshAndPersist session correctly until a future refresh.
+			 */
+			Debug( LDAP_DEBUG_ANY, "syncrepl_entry: %s "
+				"LDAP_RES_SEARCH_ENTRY(LDAP_SYNC_%s) csn-less entry received during "
+				"persist! Tainting database immediately so we don't propagate this.\n",
+				si->si_ridtxt, syncrepl_state2str( syncstate ) );
+			ldap_pvt_thread_mutex_lock( &si->si_be->be_pcl_mutex );
+			si->si_be->be_refreshing = 1;
+			ldap_pvt_thread_mutex_unlock( &si->si_be->be_pcl_mutex );
+		}
+		refreshing = 1;
+	}
 
 	if (( syncstate == LDAP_SYNC_PRESENT || syncstate == LDAP_SYNC_ADD ) ) {
 		if ( !si->si_refreshPresent && !si->si_refreshDone ) {
@@ -3732,6 +3770,7 @@ syncrepl_entry(
 	}
 
 	if ( syncstate == LDAP_SYNC_PRESENT ) {
+		/* ITS#8125 TODO: Deal with presentlist */
 		return 0;
 	} else if ( syncstate != LDAP_SYNC_DELETE ) {
 		if ( entry == NULL ) {
@@ -3885,6 +3924,14 @@ syncrepl_entry(
 			}
 		}
 retry_add:;
+		ldap_pvt_thread_mutex_lock( &si->si_be->be_pcl_mutex );
+		if ( !si->si_be->be_refreshing ) {
+			Debug( LDAP_DEBUG_SYNC, "syncrepl_entry: %s its8125 "
+					"detected an ongoing refresh, tainting database\n",
+					si->si_ridtxt );
+			si->si_be->be_refreshing = 1;
+		}
+		ldap_pvt_thread_mutex_unlock( &si->si_be->be_pcl_mutex );
 		if ( BER_BVISNULL( &dni.dn ) ) {
 			SlapReply	rs_add = {REP_RESULT};
 

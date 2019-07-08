@@ -1979,6 +1979,7 @@ struct BackendDB {
 	struct		be_pcl	*be_pending_csn_list;
 	ldap_pvt_thread_mutex_t					be_pcl_mutex;
 	struct syncinfo_s						*be_syncinfo; /* For syncrepl */
+	int be_refreshing;
 
 	void    *be_pb;         /* Netscape plugin */
 	struct ConfigOCs *be_cf_ocs;

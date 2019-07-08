@@ -152,6 +152,7 @@ typedef struct syncprov_info_t {
 	int		si_active;	/* True if there are active mods */
 	int		si_dirty;	/* True if the context is dirty, i.e changes
 						 * have been made without updating the csn. */
+	int		si_refresh; /* True if our DB is being refreshed */
 	time_t	si_chklast;	/* time of last checkpoint */
 	Avlnode	*si_mods;	/* entries being modified */
 	sessionlog	*si_logs;
@@ -959,6 +960,21 @@ syncprov_qplay( Operation *op, syncops *so )
 {
 	syncres *sr;
 	int rc = 0;
+
+	ldap_pvt_thread_rdwr_rlock( &so->s_si->si_csn_rwlock );
+	if ( so->s_si->si_refresh ) {
+		/* Cancel this persistent search if in the middle of a refresh */
+		ldap_pvt_thread_rdwr_runlock( &so->s_si->si_csn_rwlock );
+		Debug( LDAP_DEBUG_SYNC, "syncprov_op_response: its8125 %s "
+				"stopping existing persist session\n",
+				so->s_op->o_log_prefix );
+		/* FIXME: We should have cancelled all searches when we foudn out? */
+		assert( 0 );
+		/* Acquire mutex for caller */
+		ldap_pvt_thread_mutex_lock( &so->s_mutex );
+		return 1;
+	}
+	ldap_pvt_thread_rdwr_runlock( &so->s_si->si_csn_rwlock );
 
 	do {
 		ldap_pvt_thread_mutex_lock( &so->s_mutex );
@@ -1965,6 +1981,56 @@ syncprov_op_response( Operation *op, SlapReply *rs )
 	slap_overinst *on = opc->son;
 	syncprov_info_t		*si = on->on_bi.bi_private;
 	syncmatches *sm;
+	int was_refreshing;
+
+	ldap_pvt_thread_mutex_lock( &op->o_bd->be_pcl_mutex );
+	ldap_pvt_thread_rdwr_wlock( &si->si_csn_rwlock );
+	was_refreshing = si->si_refresh;
+	si->si_refresh = op->o_bd->be_refreshing;
+	ldap_pvt_thread_mutex_unlock( &op->o_bd->be_pcl_mutex );
+	if ( si->si_refresh != was_refreshing ) {
+		Debug( LDAP_DEBUG_SYNC, "syncprov_op_response: its8125 changed to %d\n",
+			si->si_refresh );
+	}
+	if ( si->si_refresh && !was_refreshing ) {
+		syncops *so, **sop = &si->si_ops;
+		int gonext;
+		ldap_pvt_thread_mutex_lock( &si->si_ops_mutex );
+		ldap_pvt_thread_rdwr_wunlock( &si->si_csn_rwlock );
+
+		Debug( LDAP_DEBUG_SYNC, "syncprov_op_response: its8125 "
+			"DB refresh detected, %s (%s)\n",
+			*sop ? "checking persist ops for reset" : "no operations to reset",
+			op->o_bd->be_suffix[0].bv_val );
+		for ( so = *sop; so; sop = gonext ? &(*sop)->s_next : sop, so = *sop ) {
+			SlapReply rs2 = {REP_RESULT};
+
+			gonext = 1;
+			/* Only cancel if already in persist */
+			if ( so->s_flags & PS_IS_REFRESHING ) {
+				Debug( LDAP_DEBUG_SYNC, "syncprov_op_response: its8125 %s "
+					"still in refresh\n",
+					so->s_op->o_log_prefix );
+				continue;
+			}
+			gonext = 0;
+
+			Debug( LDAP_DEBUG_SYNC, "syncprov_op_response: its8125 %s "
+				"stopping persist session\n",
+				so->s_op->o_log_prefix );
+			rs2.sr_err = LDAP_BUSY;
+			rs2.sr_text = "its8125 Our database has gone into refresh, please retry later";
+			send_ldap_result( so->s_op, &rs2 );
+			if ( so->s_flags & PS_TASK_QUEUED )
+				ldap_pvt_thread_pool_retract( so->s_pool_cookie );
+			if ( !syncprov_drop_psearch( so, 1 ) )
+				so->s_si = NULL;
+		}
+		si->si_ops = NULL;
+		ldap_pvt_thread_mutex_unlock( &si->si_ops_mutex );
+	} else {
+		ldap_pvt_thread_rdwr_wunlock( &si->si_csn_rwlock );
+	}
 
 	if ( rs->sr_err == LDAP_SUCCESS )
 	{
@@ -2555,6 +2621,7 @@ syncprov_search_response( Operation *op, SlapReply *rs )
 		 * Note: refresh never gets here if there were no changes
 		 */
 		if ( !ss->ss_so ) {
+bailout:
 			rs->sr_ctrls = op->o_tmpalloc( sizeof(LDAPControl *)*2,
 				op->o_tmpmemctx );
 			rs->sr_ctrls[1] = NULL;
@@ -2564,6 +2631,20 @@ syncprov_search_response( Operation *op, SlapReply *rs )
 					LDAP_SYNC_REFRESH_DELETES );
 			op->o_tmpfree( cookie.bv_val, op->o_tmpmemctx );
 		} else {
+			ldap_pvt_thread_rdwr_rlock( &si->si_csn_rwlock );
+			if ( si->si_refresh ) {
+				/* ITS#8125 Our DB is being refreshed, we can't support persist
+				 * sessions safely while that's the case */
+				ldap_pvt_thread_rdwr_runlock( &si->si_csn_rwlock );
+				Debug( LDAP_DEBUG_SYNC, "syncprov_op_response: its8125 %s "
+					"stopping session just after refresh\n",
+					ss->ss_so->s_op->o_log_prefix );
+				syncprov_free_syncop( ss->ss_so, FS_LOCK|FS_UNLINK );
+				rs->sr_text = "its8125 Provider is refreshing from another source";
+				goto bailout;
+			}
+			ldap_pvt_thread_rdwr_runlock( &si->si_csn_rwlock );
+
 		/* It's RefreshAndPersist, transition to Persist phase */
 			syncprov_sendinfo( op, rs, ( ss->ss_flags & SS_PRESENT ) ?
 				LDAP_TAG_SYNC_REFRESH_PRESENT : LDAP_TAG_SYNC_REFRESH_DELETE,
