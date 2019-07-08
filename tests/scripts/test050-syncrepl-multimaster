@@ -21,6 +21,7 @@ if test $SYNCPROV = syncprovno; then
 	exit 0
 fi 
 
+RETRIES=${RETRIES-50}
 MMR=${MMR-4}
 
 if [ $MMR -gt 9 ]; then
@@ -94,18 +95,17 @@ fi
 KILLPIDS="$PID"
 cd $TESTWD
 
-sleep 1
+sleep $SLEEP0
 
-echo "Using ldapsearch to check that server 1 is running..."
-for i in 0 1 2 3 4 5; do
+for i in `seq 10`; do
 	$LDAPSEARCH -s base -b "" -H $URI1 \
 		'objectclass=*' > /dev/null 2>&1
 	RC=$?
 	if test $RC = 0 ; then
 		break
 	fi
-	echo "Waiting 5 seconds for slapd to start..."
-	sleep 5
+	echo "Waiting $SLEEP0 seconds for slapd to start..."
+	sleep $SLEEP0
 done
 
 if test $RC != 0 ; then
@@ -165,7 +165,7 @@ PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 echo "olcSyncRepl: rid=00$n provider=$URI binddn=\"cn=config\" bindmethod=simple" >> $TMP
 echo "  credentials=$CONFIGPW searchbase=\"cn=config\" type=refreshAndPersist" >> $TMP
-echo "  retry=\"3 10 300 5\" timeout=3" >> $TMP
+echo "  retry=\"1 10 300 5\" timeout=3" >> $TMP
 n=`expr $n + 1`
 done
 echo "-" >> $TMP
@@ -195,18 +195,17 @@ fi
 KILLPIDS="$KILLPIDS $SLAVEPID"
 cd $TESTWD
 
-sleep 1
+sleep $SLEEP0
 
-echo "Using ldapsearch to check that server $n is running..."
-for i in 0 1 2 3 4 5; do
+for i in `seq 10`; do
 	$LDAPSEARCH -s base -b "" -H $URI \
 		'objectclass=*' > /dev/null 2>&1
 	RC=$?
 	if test $RC = 0 ; then
 		break
 	fi
-	echo "Waiting 5 seconds for slapd to start..."
-	sleep 5
+	echo "Waiting $SLEEP0 seconds for slapd to start..."
+	sleep $SLEEP0
 done
 
 if test $RC != 0 ; then
@@ -227,7 +226,7 @@ P2=`expr $BASEPORT + $j`
 U2="ldap://${LOCALHOST}:$P2/"
 echo "olcSyncRepl: rid=00$j provider=$U2 binddn=\"cn=config\" bindmethod=simple" >> $TMP
 echo "  credentials=$CONFIGPW searchbase=\"cn=config\" type=refreshAndPersist" >> $TMP
-echo "  retry=\"3 10 300 5\" timeout=3" >> $TMP
+echo "  retry=\"1 10 300 5\" timeout=3" >> $TMP
 j=`expr $j + 1`
 done
 cat <<EOF >> $TMP
@@ -291,7 +290,7 @@ URI="ldap://${LOCALHOST}:$PORT/"
 
 echo "olcSyncRepl: rid=01$n provider=$URI binddn=\"$MANAGERDN\" bindmethod=simple" >> $TMP
 echo "  credentials=$PASSWD searchbase=\"$BASEDN\" $SYNCTYPE" >> $TMP
-echo "  retry=\"3 10 300 5\" timeout=3" >> $TMP
+echo "  retry=\"1 10 300 5\" timeout=3" >> $TMP
 n=`expr $n + 1`
 done
 
@@ -302,6 +301,7 @@ dn: olcOverlay=syncprov,olcDatabase={1}${BACKEND},cn=config
 objectClass: olcOverlayConfig
 objectClass: olcSyncProvConfig
 olcOverlay: syncprov
+olcSpSessionLog: 10
 EOF
 $LDAPADD -D cn=config -H $URI1 -y $CONFIGPWF < $TMP >>$TESTOUT 2>&1
 RC=$?
@@ -337,15 +337,49 @@ if test $RC != 0 ; then
 	exit $RC
 fi
 
-echo "Waiting $SLEEP2 seconds for syncrepl to receive changes..."
-sleep $SLEEP2
-
 n=1
 while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 
-echo "Using ldapsearch to read config from server $n..."
+    if test $n = 1; then
+        for i in `seq $RETRIES`; do
+            CSN=`$LDAPSEARCH -b cn=config -D cn=config -H $URI -y $CONFIGPWF  \
+                -s base contextCSN | grep contextCSN`
+            if test `echo "$CSN" | grep -c contextCSN` = 4; then
+                break
+            fi
+            sleep $SLEEP0
+        done
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -b cn=config -D cn=config -H $URI -y $CONFIGPWF  \
+                -s base contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+    if ! test $n = 1 && ! test "$REPLICA_CSN" = "$CSN"; then
+        CSN=`$LDAPSEARCH -b cn=config -D cn=config -H $URI -y $CONFIGPWF  \
+            -s base contextCSN | grep contextCSN`
+        if test "$REPLICA_CSN" = "$CSN"; then
+            echo ". done"
+        else
+            echo "CSNs differ between servers 1 and $n:"
+            echo "Server 1:"
+            echo "$CSN"
+            echo "Server $n:"
+            echo "$REPLICA_CSN"
+            test $KILLSERVERS != no && kill -HUP $KILLPIDS
+            exit 1
+        fi
+    fi
+
 $LDAPSEARCH -b cn=config -D cn=config -H $URI -y $CONFIGPWF  \
 	'objectclass=*' > $TESTDIR/server$n.out 2>&1
 RC=$?
@@ -356,14 +390,13 @@ if test $RC != 0 ; then
 	exit $RC
 fi
 
-$LDIFFILTER < $TESTDIR/server$n.out > $TESTDIR/server$n.flt
+$LDIFFILTER -s a < $TESTDIR/server$n.out > $TESTDIR/server$n.flt
 
 n=`expr $n + 1`
 done
 
 n=2
 while [ $n -le $MMR ]; do
-echo "Comparing retrieved configs from server 1 and server $n..."
 $CMP $MASTERFLT $TESTDIR/server$n.flt > $CMPOUT
 
 if test $? != 0 ; then
@@ -379,7 +412,47 @@ while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 
-echo "Using ldapsearch to read all the entries from server $n..."
+    if test $n = 1; then
+        for i in `seq $RETRIES`; do
+            CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+            if test `echo "$CSN" | grep -c contextCSN` = 1; then
+                break
+            fi
+            sleep $SLEEP0
+        done
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN 2>/dev/null | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+    if ! test $n = 1 && ! test "$REPLICA_CSN" = "$CSN"; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+        if test "$REPLICA_CSN" = "$CSN"; then
+            echo ". done"
+        else
+            echo "CSNs differ between servers 1 and $n:"
+            echo "Server 1:"
+            echo "$CSN"
+            echo "Server $n:"
+            echo "$REPLICA_CSN"
+            test $KILLSERVERS != no && kill -HUP $KILLPIDS
+            exit 1
+        fi
+    fi
+
 $LDAPSEARCH -S "" -b "$BASEDN" -D "$MANAGERDN" -H $URI -w $PASSWD  \
 	'objectclass=*' > $TESTDIR/server$n.out 2>&1
 RC=$?
@@ -395,7 +468,6 @@ done
 
 n=2
 while [ $n -le $MMR ]; do
-echo "Comparing retrieved entries from server 1 and server $n..."
 $CMP $MASTERFLT $TESTDIR/server$n.flt > $CMPOUT
 
 if test $? != 0 ; then
@@ -415,16 +487,51 @@ if test $RC != 0 ; then
 	test $KILLSERVERS != no && kill -HUP $KILLPIDS
 	exit $RC
 fi
-
-echo "Waiting $SLEEP1 seconds for syncrepl to receive changes..."
-sleep $SLEEP1
+TARGET=2
+CSN=`$LDAPSEARCH -H $URI2 \
+    -D "$MANAGERDN" -w $PASSWD \
+    -s base -b "$BASEDN" contextCSN | grep contextCSN`
 
 n=1
 while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 
-echo "Using ldapsearch to read all the entries from server $n..."
+    if test $n = $TARGET; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+    if ! test $n = $TARGET && ! test "$REPLICA_CSN" = "$CSN"; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+        if test "$REPLICA_CSN" = "$CSN"; then
+            echo ". done"
+        else
+            echo "CSNs differ between servers $TARGET and $n:"
+            echo "Server $TARGET:"
+            echo "$CSN"
+            echo "Server $n:"
+            echo "$REPLICA_CSN"
+            test $KILLSERVERS != no && kill -HUP $KILLPIDS
+            exit 1
+        fi
+    fi
+
 $LDAPSEARCH -S "" -b "$BASEDN" -D "$MANAGERDN" -H $URI -w $PASSWD  \
 	'objectclass=*' > $TESTDIR/server$n.out 2>&1
 RC=$?
@@ -440,7 +547,6 @@ done
 
 n=2
 while [ $n -le $MMR ]; do
-echo "Comparing retrieved entries from server 1 and server $n..."
 $CMP $MASTERFLT $TESTDIR/server$n.flt > $CMPOUT
 
 if test $? != 0 ; then
@@ -465,16 +571,35 @@ if test $RC != 0 ; then
 	test $KILLSERVERS != no && kill -HUP $KILLPIDS
 	exit $RC
 fi
-
-echo "Waiting $SLEEP1 seconds for syncrepl to receive changes..."
-sleep $SLEEP1
+TARGET=3
+CSN=`$LDAPSEARCH -H $URI3 \
+    -D "$MANAGERDN" -w $PASSWD \
+    -s base -b "$BASEDN" contextCSN | grep contextCSN`
 
 n=1
 while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 
-echo "Using ldapsearch to read all the entries from server $n..."
+    if test $n = $TARGET; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+
 $LDAPSEARCH -S "" -b "$BASEDN" -D "$MANAGERDN" -H $URI -w $PASSWD  \
 	'objectclass=*' > $TESTDIR/server$n.out 2>&1
 RC=$?
@@ -490,7 +615,6 @@ done
 
 n=2
 while [ $n -le $MMR ]; do
-echo "Comparing retrieved entries from server 1 and server $n..."
 $CMP $MASTERFLT $TESTDIR/server$n.flt > $CMPOUT
 
 if test $? != 0 ; then
@@ -529,15 +653,30 @@ if test $RC != 0 ; then
 	exit $RC
 fi
 
-echo "Waiting $SLEEP1 seconds for syncrepl to receive changes..."
-sleep $SLEEP1
-
 n=1
 while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 
-echo "Using ldapsearch to read all the entries from server $n..."
+    if test $n = 1; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+
 $LDAPSEARCH -S "" -b "$BASEDN" -D "$MANAGERDN" -H $URI -w $PASSWD  \
 	'objectclass=*' > $TESTDIR/server$n.out 2>&1
 RC=$?
@@ -553,7 +692,6 @@ done
 
 n=2
 while [ $n -le $MMR ]; do
-echo "Comparing retrieved entries from server 1 and server $n..."
 $CMP $MASTERFLT $TESTDIR/server$n.flt > $CMPOUT
 
 if test $? != 0 ; then
@@ -576,9 +714,36 @@ if test $RC != 0 ; then
 	test $KILLSERVERS != no && kill -HUP $KILLPIDS
 	exit $RC
 fi
+TARGET=2
+CSN=`$LDAPSEARCH -H $URI2 \
+    -D "$MANAGERDN" -w $PASSWD \
+    -s base -b "$BASEDN" contextCSN | grep contextCSN`
 
-echo "Waiting $SLEEP1 seconds for syncrepl to receive changes..."
-sleep $SLEEP1
+n=1
+while [ $n -le $MMR ]; do
+PORT=`expr $BASEPORT + $n`
+URI="ldap://${LOCALHOST}:$PORT/"
+
+    if test $n = $TARGET; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+    n=`expr $n + 1`
+done
 
 echo "Using ldapmodify to delete entries from server 3..."
 $LDAPMODIFY -D "$MANAGERDN" -H $URI3 -w $PASSWD \
@@ -592,16 +757,35 @@ if test $RC != 0 ; then
 	test $KILLSERVERS != no && kill -HUP $KILLPIDS
 	exit $RC
 fi
-
-echo "Waiting $SLEEP1 seconds for syncrepl to receive changes..."
-sleep $SLEEP1
+TARGET=3
+CSN=`$LDAPSEARCH -H $URI3 \
+    -D "$MANAGERDN" -w $PASSWD \
+    -s base -b "$BASEDN" contextCSN | grep contextCSN`
 
 n=1
 while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 
-echo "Using ldapsearch to read all the entries from server $n..."
+    if test $n = $TARGET; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+
 $LDAPSEARCH -S "" -b "$BASEDN" -D "$MANAGERDN" -H $URI -w $PASSWD  \
 	'objectclass=*' > $TESTDIR/server$n.out 2>&1
 RC=$?
@@ -617,7 +801,6 @@ done
 
 n=2
 while [ $n -le $MMR ]; do
-echo "Comparing retrieved entries from server 1 and server $n..."
 $CMP $MASTERFLT $TESTDIR/server$n.flt > $CMPOUT
 
 if test $? != 0 ; then
@@ -651,18 +834,17 @@ fi
 KILLPIDS="$PID"
 cd $TESTWD
 
-sleep 1
+sleep $SLEEP0
 
-echo "Using ldapsearch to check that server 1 is running..."
-for i in 0 1 2 3 4 5; do
+for i in `seq 10`; do
 	$LDAPSEARCH -s base -b "" -H $URI1 \
 		'objectclass=*' > /dev/null 2>&1
 	RC=$?
 	if test $RC = 0 ; then
 		break
 	fi
-	echo "Waiting 5 seconds for slapd to start..."
-	sleep 5
+	echo "Waiting $SLEEP0 seconds for slapd to start..."
+	sleep $SLEEP0
 done
 
 if test $RC != 0 ; then
@@ -694,16 +876,15 @@ n=2
 while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
-echo "Using ldapsearch to check that server $n is running..."
-for i in 0 1 2 3 4 5; do
+for i in `seq 10`; do
 	$LDAPSEARCH -s base -b "" -H $URI \
 		'objectclass=*' > /dev/null 2>&1
 	RC=$?
 	if test $RC = 0 ; then
 		break
 	fi
-	echo "Waiting 5 seconds for slapd to start..."
-	sleep 5
+	echo "Waiting $SLEEP0 seconds for slapd to start..."
+	sleep $SLEEP0
 done
 
 if test $RC != 0 ; then
@@ -715,12 +896,36 @@ n=`expr $n + 1`
 done
 
 # Insert modifications and more tests here.
-echo "Waiting $SLEEP1 seconds for servers to resync..."
-sleep $SLEEP1
+
+n=1
+while [ $n -le $MMR ]; do
+PORT=`expr $BASEPORT + $n`
+URI="ldap://${LOCALHOST}:$PORT/"
+
+    if test $n = 1; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+    n=`expr $n + 1`
+done
 
 echo "Using ldapmodify to add/modify/delete entries from server 1..."
-for i in 1 2 3 4 5 6 7 8 9 10; do
-echo "  iteration $i"
+for i in `seq 10`; do
+echo -n "\r$(tput el1)  iteration $i/10"
 $LDAPMODIFY -D "$MANAGERDN" -H $URI1 -w $PASSWD \
 	>> $TESTOUT 2>&1 << EOMODS
 dn: cn=Add-Mod-Del,dc=example,dc=com
@@ -744,16 +949,32 @@ if test $RC != 0 ; then
 	exit $RC
 fi
 done
-
-echo "Waiting $SLEEP1 seconds for servers to resync..."
-sleep $SLEEP1
+echo
 
 n=1
 while [ $n -le $MMR ]; do
 PORT=`expr $BASEPORT + $n`
 URI="ldap://${LOCALHOST}:$PORT/"
 
-echo "Using ldapsearch to read all the entries from server $n..."
+    if test $n = 1; then
+        CSN=`$LDAPSEARCH -H $URI \
+            -D "$MANAGERDN" -w $PASSWD \
+            -s base -b "$BASEDN" contextCSN | grep contextCSN`
+    else
+        for i in `seq $RETRIES`; do
+            REPLICA_CSN=`$LDAPSEARCH -H $URI \
+                -D "$MANAGERDN" -w $PASSWD \
+                -s base -b "$BASEDN" contextCSN | grep contextCSN`
+
+            if test "$REPLICA_CSN" = "$CSN"; then
+                test $i -gt 1 && echo "$(tput el1)\rServer $n up-to-date after $i/$RETRIES retries"
+                break;
+            fi
+            echo -n "\rWaiting for server $n to catch up ($i/$RETRIES)"
+            sleep $SLEEP0
+        done
+    fi
+
 $LDAPSEARCH -S "" -b "$BASEDN" -D "$MANAGERDN" -H $URI -w $PASSWD  \
 	'objectclass=*' > $TESTDIR/server$n.out 2>&1
 RC=$?
@@ -769,7 +990,6 @@ done
 
 n=2
 while [ $n -le $MMR ]; do
-echo "Comparing retrieved entries from server 1 and server $n..."
 $CMP $MASTERFLT $TESTDIR/server$n.flt > $CMPOUT
 
 if test $? != 0 ; then
